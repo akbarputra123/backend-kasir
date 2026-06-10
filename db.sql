@@ -69,6 +69,30 @@ CREATE TABLE categories (
 
     UNIQUE KEY unique_category_store (id_store, nama_kategori)
 );
+CREATE TABLE discounts (
+    id_discount INT AUTO_INCREMENT PRIMARY KEY,
+
+    id_store INT NOT NULL,
+
+    nama_diskon VARCHAR(150) NOT NULL,
+
+    tipe_diskon ENUM('nominal', 'persen') NOT NULL DEFAULT 'persen',
+    nilai_diskon DECIMAL(15,2) NOT NULL DEFAULT 0,
+
+    tanggal_mulai DATETIME NULL,
+    tanggal_berakhir DATETIME NULL,
+
+    status_diskon ENUM('aktif', 'nonaktif') NOT NULL DEFAULT 'aktif',
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_discounts_store
+        FOREIGN KEY (id_store)
+        REFERENCES stores(id_store)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
 CREATE TABLE products (
     id_product INT AUTO_INCREMENT PRIMARY KEY,
 
@@ -275,29 +299,5 @@ CREATE TABLE subscriptions (
         FOREIGN KEY (id_plan)
         REFERENCES subscription_plans(id_plan)
         ON DELETE RESTRICT
-        ON UPDATE CASCADE
-);
-CREATE TABLE discounts (
-    id_discount INT AUTO_INCREMENT PRIMARY KEY,
-
-    id_store INT NOT NULL,
-
-    nama_diskon VARCHAR(150) NOT NULL,
-
-    tipe_diskon ENUM('nominal', 'persen') NOT NULL DEFAULT 'persen',
-    nilai_diskon DECIMAL(15,2) NOT NULL DEFAULT 0,
-
-    tanggal_mulai DATETIME NULL,
-    tanggal_berakhir DATETIME NULL,
-
-    status_diskon ENUM('aktif', 'nonaktif') NOT NULL DEFAULT 'aktif',
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
-    CONSTRAINT fk_discounts_store
-        FOREIGN KEY (id_store)
-        REFERENCES stores(id_store)
-        ON DELETE CASCADE
         ON UPDATE CASCADE
 );
