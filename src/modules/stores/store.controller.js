@@ -3,6 +3,26 @@ const { successResponse, errorResponse } = require("../../utils/response")
 
 /*
 |--------------------------------------------------------------------------
+| BUILD LOGO PATH
+|--------------------------------------------------------------------------
+| Kalau request membawa file dari multer, simpan path relatif ke database:
+| /uploads/stores/nama_file.png
+|--------------------------------------------------------------------------
+*/
+const buildLogoPath = (req) => {
+  if (req.file) {
+    return `/uploads/stores/${req.file.filename}`
+  }
+
+  if (req.body && req.body.logo) {
+    return req.body.logo
+  }
+
+  return null
+}
+
+/*
+|--------------------------------------------------------------------------
 | GET ALL STORES
 |--------------------------------------------------------------------------
 */
@@ -80,11 +100,20 @@ const getStoreById = async (req, res) => {
 |--------------------------------------------------------------------------
 | CREATE STORE
 |--------------------------------------------------------------------------
+| Mendukung:
+| - application/json
+| - multipart/form-data dengan field file: logo
+|--------------------------------------------------------------------------
 */
 const createStore = async (req, res) => {
   try {
+    const logo = buildLogoPath(req)
+
     const store = await storeService.createStore(
-      req.body,
+      {
+        ...req.body,
+        logo
+      },
       req.user
     )
 
@@ -108,12 +137,21 @@ const createStore = async (req, res) => {
 |--------------------------------------------------------------------------
 | UPDATE STORE
 |--------------------------------------------------------------------------
+| Mendukung:
+| - application/json
+| - multipart/form-data dengan field file: logo
+|--------------------------------------------------------------------------
 */
 const updateStore = async (req, res) => {
   try {
+    const logo = buildLogoPath(req)
+
     const store = await storeService.updateStore(
       req.params.id,
-      req.body,
+      {
+        ...req.body,
+        logo
+      },
       req.user
     )
 
@@ -140,7 +178,16 @@ const updateStore = async (req, res) => {
 */
 const updateStoreLogo = async (req, res) => {
   try {
-    const logo = req.file ? `/uploads/stores/${req.file.filename}` : req.body.logo
+    const logo = buildLogoPath(req)
+
+    if (!logo) {
+      return errorResponse(
+        res,
+        "Logo toko wajib diisi",
+        400,
+        "Logo toko wajib diisi"
+      )
+    }
 
     const store = await storeService.updateStoreLogo(
       req.params.id,

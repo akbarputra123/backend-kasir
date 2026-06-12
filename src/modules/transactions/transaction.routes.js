@@ -183,7 +183,7 @@ router.post(
   "/:id/cancel",
   authMiddleware,
   subscriptionMiddleware,
-  authorizeRoles("owner", "admin"),
+  authorizeRoles("owner", "kasir","admin"),
   cancelTransaction
 )
 

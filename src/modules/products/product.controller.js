@@ -3,6 +3,25 @@ const { successResponse, errorResponse } = require("../../utils/response")
 
 /*
 |--------------------------------------------------------------------------
+| BUILD FOTO PATH
+|--------------------------------------------------------------------------
+| Jika ada file dari multer, simpan path relatif ke database.
+|--------------------------------------------------------------------------
+*/
+const buildFotoPath = (req) => {
+  if (req.file) {
+    return `/uploads/products/${req.file.filename}`
+  }
+
+  if (req.body && req.body.foto) {
+    return req.body.foto
+  }
+
+  return null
+}
+
+/*
+|--------------------------------------------------------------------------
 | GET ALL PRODUCTS
 |--------------------------------------------------------------------------
 */
@@ -58,11 +77,20 @@ const getProductById = async (req, res) => {
 |--------------------------------------------------------------------------
 | CREATE PRODUCT
 |--------------------------------------------------------------------------
+| Mendukung:
+| - application/json
+| - multipart/form-data dengan field file: foto
+|--------------------------------------------------------------------------
 */
 const createProduct = async (req, res) => {
   try {
+    const foto = buildFotoPath(req)
+
     const product = await productService.createProduct(
-      req.body,
+      {
+        ...req.body,
+        foto
+      },
       req.user
     )
 
@@ -86,12 +114,21 @@ const createProduct = async (req, res) => {
 |--------------------------------------------------------------------------
 | UPDATE PRODUCT
 |--------------------------------------------------------------------------
+| Mendukung:
+| - application/json
+| - multipart/form-data dengan field file: foto
+|--------------------------------------------------------------------------
 */
 const updateProduct = async (req, res) => {
   try {
+    const foto = buildFotoPath(req)
+
     const product = await productService.updateProduct(
       req.params.id,
-      req.body,
+      {
+        ...req.body,
+        foto
+      },
       req.user
     )
 
@@ -118,9 +155,16 @@ const updateProduct = async (req, res) => {
 */
 const updateProductFoto = async (req, res) => {
   try {
-    const foto = req.file
-      ? `/uploads/products/${req.file.filename}`
-      : req.body.foto
+    const foto = buildFotoPath(req)
+
+    if (!foto) {
+      return errorResponse(
+        res,
+        "Foto produk wajib diisi",
+        400,
+        "Foto produk wajib diisi"
+      )
+    }
 
     const product = await productService.updateProductFoto(
       req.params.id,

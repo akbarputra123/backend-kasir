@@ -2,6 +2,8 @@ const express = require("express")
 const cors = require("cors")
 const helmet = require("helmet")
 const morgan = require("morgan")
+const path = require("path")
+const fs = require("fs")
 require("dotenv").config()
 
 const swaggerUi = require("swagger-ui-express")
@@ -18,10 +20,36 @@ const app = express()
 
 /*
 |--------------------------------------------------------------------------
-| CORS
+| UPLOAD DIRECTORY
 |--------------------------------------------------------------------------
-| Kalau CLIENT_URL belum diisi, origin dibuat true agar Swagger/API
-| tetap bisa diakses dari IP VPS saat development/testing.
+| Struktur:
+| project/
+| ├── src/
+| │   └── app.js
+| └── uploads/
+|     ├── stores/
+|     └── products/
+|--------------------------------------------------------------------------
+*/
+const uploadsDir = path.join(__dirname, "../uploads")
+const storeUploadsDir = path.join(__dirname, "../uploads/stores")
+const productUploadsDir = path.join(__dirname, "../uploads/products")
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true })
+}
+
+if (!fs.existsSync(storeUploadsDir)) {
+  fs.mkdirSync(storeUploadsDir, { recursive: true })
+}
+
+if (!fs.existsSync(productUploadsDir)) {
+  fs.mkdirSync(productUploadsDir, { recursive: true })
+}
+
+/*
+|--------------------------------------------------------------------------
+| CORS
 |--------------------------------------------------------------------------
 */
 app.use(
@@ -42,23 +70,33 @@ app.use(morgan("dev"))
 |--------------------------------------------------------------------------
 | BODY PARSER
 |--------------------------------------------------------------------------
+| Untuk JSON dan form biasa.
+| Multipart/form-data ditangani multer di route.
+|--------------------------------------------------------------------------
 */
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
 /*
 |--------------------------------------------------------------------------
-| STATIC FILE
+| STATIC FILE UPLOADS
+|--------------------------------------------------------------------------
+| Contoh URL:
+| http://localhost:2000/uploads/products/foto.png
+| http://IP_SERVER:2000/uploads/products/foto.png
 |--------------------------------------------------------------------------
 */
-app.use("/uploads", express.static("uploads"))
+app.use(
+  "/uploads",
+  express.static(uploadsDir, {
+    fallthrough: false,
+    maxAge: "7d"
+  })
+)
 
 /*
 |--------------------------------------------------------------------------
 | SWAGGER DOCUMENTATION
-|--------------------------------------------------------------------------
-| Swagger diletakkan sebelum helmet agar file CSS/JS Swagger tidak
-| diblokir oleh security header saat akses via HTTP IP VPS.
 |--------------------------------------------------------------------------
 */
 app.use(
@@ -73,14 +111,14 @@ app.use(
 |--------------------------------------------------------------------------
 | SECURITY HEADER
 |--------------------------------------------------------------------------
-| Karena kamu masih akses pakai HTTP + IP VPS, beberapa header helmet
-| dimatikan agar Swagger tidak memaksa/mengacaukan HTTPS.
+| crossResourcePolicy dimatikan agar gambar upload bisa dibaca dari Flutter/Web.
 |--------------------------------------------------------------------------
 */
 app.use(
   helmet({
     contentSecurityPolicy: false,
     crossOriginOpenerPolicy: false,
+    crossResourcePolicy: false,
     originAgentCluster: false,
     hsts: false
   })
@@ -92,6 +130,23 @@ app.use(
 |--------------------------------------------------------------------------
 */
 app.use("/api", routes)
+
+/*
+|--------------------------------------------------------------------------
+| HEALTH CHECK
+|--------------------------------------------------------------------------
+*/
+app.get("/", (req, res) => {
+  res.json({
+    sukses: true,
+    pesan: "Server SIOPOS berjalan",
+    uploads: "/uploads",
+    stores_uploads: "/uploads/stores",
+    products_uploads: "/uploads/products",
+    api: "/api",
+    docs: "/api-docs"
+  })
+})
 
 /*
 |--------------------------------------------------------------------------

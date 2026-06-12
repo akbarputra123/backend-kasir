@@ -229,6 +229,15 @@ CREATE TABLE transaction_items (
     kode_produk VARCHAR(100) NOT NULL,
     nama_produk VARCHAR(150) NOT NULL,
 
+    harga_asli DECIMAL(15,2) NOT NULL DEFAULT 0,
+
+    id_discount INT NULL,
+    nama_diskon VARCHAR(150) NULL,
+    tipe_diskon ENUM('nominal', 'persen') NULL,
+    nilai_diskon DECIMAL(15,2) NOT NULL DEFAULT 0,
+
+    diskon DECIMAL(15,2) NOT NULL DEFAULT 0,
+
     harga_jual DECIMAL(15,2) NOT NULL DEFAULT 0,
     qty INT NOT NULL DEFAULT 1,
     subtotal DECIMAL(15,2) NOT NULL DEFAULT 0,
@@ -244,6 +253,12 @@ CREATE TABLE transaction_items (
     CONSTRAINT fk_transaction_items_product
         FOREIGN KEY (id_product)
         REFERENCES products(id_product)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_transaction_items_discount
+        FOREIGN KEY (id_discount)
+        REFERENCES discounts(id_discount)
         ON DELETE SET NULL
         ON UPDATE CASCADE
 );
