@@ -31,6 +31,10 @@ const getAllProducts = async (currentUser) => {
 |--------------------------------------------------------------------------
 */
 const getProductById = async (id_product, currentUser) => {
+  if (!currentUser) {
+    throw new Error("User tidak valid")
+  }
+
   if (!id_product) {
     throw new Error("ID produk wajib diisi")
   }
@@ -54,6 +58,82 @@ const getProductById = async (id_product, currentUser) => {
   }
 
   return product
+}
+
+/*
+|--------------------------------------------------------------------------
+| HELPER: NORMALIZE EMPTY VALUE
+|--------------------------------------------------------------------------
+*/
+const emptyToNull = (value) => {
+  if (value === undefined || value === null) {
+    return null
+  }
+
+  const stringValue = value.toString().trim()
+
+  if (stringValue === "" || stringValue === "null" || stringValue === "-") {
+    return null
+  }
+
+  return value
+}
+
+/*
+|--------------------------------------------------------------------------
+| HELPER: TO NUMBER
+|--------------------------------------------------------------------------
+*/
+const toNumber = (value, defaultValue = 0) => {
+  const cleanValue = emptyToNull(value)
+
+  if (cleanValue === null) {
+    return defaultValue
+  }
+
+  const numberValue = Number(cleanValue)
+
+  if (Number.isNaN(numberValue)) {
+    return defaultValue
+  }
+
+  return numberValue
+}
+
+/*
+|--------------------------------------------------------------------------
+| HELPER: TO ID
+|--------------------------------------------------------------------------
+*/
+const toId = (value) => {
+  const cleanValue = emptyToNull(value)
+
+  if (cleanValue === null) {
+    return null
+  }
+
+  const numberValue = Number(cleanValue)
+
+  if (Number.isNaN(numberValue) || numberValue <= 0) {
+    return null
+  }
+
+  return numberValue
+}
+
+/*
+|--------------------------------------------------------------------------
+| HELPER: TO STRING
+|--------------------------------------------------------------------------
+*/
+const toStringValue = (value, defaultValue = "") => {
+  const cleanValue = emptyToNull(value)
+
+  if (cleanValue === null) {
+    return defaultValue
+  }
+
+  return cleanValue.toString().trim()
 }
 
 /*
@@ -105,10 +185,39 @@ const validateDiscount = async (id_discount, id_store) => {
 
 /*
 |--------------------------------------------------------------------------
+| NORMALIZE PRODUCT DATA
+|--------------------------------------------------------------------------
+| Data dari JSON dan multipart/form-data dibuat seragam.
+|--------------------------------------------------------------------------
+*/
+const normalizeProductData = (data = {}) => {
+  return {
+    id_store: toId(data.id_store),
+    id_category: toId(data.id_category),
+    id_discount: toId(data.id_discount),
+
+    kode_produk: toStringValue(data.kode_produk),
+    barcode: toStringValue(data.barcode),
+    nama_produk: toStringValue(data.nama_produk),
+    deskripsi: toStringValue(data.deskripsi),
+
+    harga_beli: toNumber(data.harga_beli, 0),
+    harga_jual: toNumber(data.harga_jual, 0),
+    stok: toNumber(data.stok, 0),
+    stok_minimum: toNumber(data.stok_minimum, 0),
+
+    satuan: toStringValue(data.satuan, "pcs"),
+    foto: emptyToNull(data.foto),
+    status_produk: toStringValue(data.status_produk, "aktif")
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
 | CREATE PRODUCT
 |--------------------------------------------------------------------------
 */
-const createProduct = async (data, currentUser) => {
+const createProduct = async (data = {}, currentUser) => {
   if (!currentUser) {
     throw new Error("User tidak valid")
   }
@@ -132,7 +241,7 @@ const createProduct = async (data, currentUser) => {
     satuan,
     foto,
     status_produk
-  } = data
+  } = normalizeProductData(data)
 
   if (!kode_produk || !nama_produk) {
     throw new Error("Kode produk dan nama produk wajib diisi")
@@ -218,15 +327,15 @@ const createProduct = async (data, currentUser) => {
     id_category: id_category || null,
     id_discount: id_discount || null,
     kode_produk,
-    barcode,
+    barcode: barcode || null,
     nama_produk,
-    deskripsi,
-    harga_beli: Number(harga_beli || 0),
-    harga_jual: Number(harga_jual || 0),
-    stok: Number(stok || 0),
-    stok_minimum: Number(stok_minimum || 0),
+    deskripsi: deskripsi || null,
+    harga_beli,
+    harga_jual,
+    stok,
+    stok_minimum,
     satuan: satuan || "pcs",
-    foto,
+    foto: foto || null,
     status_produk: status_produk || "aktif"
   })
 }
@@ -236,7 +345,11 @@ const createProduct = async (data, currentUser) => {
 | UPDATE PRODUCT
 |--------------------------------------------------------------------------
 */
-const updateProduct = async (id_product, data, currentUser) => {
+const updateProduct = async (id_product, data = {}, currentUser) => {
+  if (!currentUser) {
+    throw new Error("User tidak valid")
+  }
+
   if (!id_product) {
     throw new Error("ID produk wajib diisi")
   }
@@ -266,7 +379,7 @@ const updateProduct = async (id_product, data, currentUser) => {
     satuan,
     foto,
     status_produk
-  } = data
+  } = normalizeProductData(data)
 
   if (!kode_produk || !nama_produk || !status_produk) {
     throw new Error("Kode produk, nama produk, dan status produk wajib diisi")
@@ -362,15 +475,15 @@ const updateProduct = async (id_product, data, currentUser) => {
     id_category: id_category || null,
     id_discount: id_discount || null,
     kode_produk,
-    barcode,
+    barcode: barcode || null,
     nama_produk,
-    deskripsi,
-    harga_beli: Number(harga_beli || 0),
-    harga_jual: Number(harga_jual || 0),
-    stok: Number(stok || 0),
-    stok_minimum: Number(stok_minimum || 0),
+    deskripsi: deskripsi || null,
+    harga_beli,
+    harga_jual,
+    stok,
+    stok_minimum,
     satuan: satuan || "pcs",
-    foto: foto || product.foto,
+    foto: foto || product.foto || null,
     status_produk
   })
 
@@ -387,6 +500,10 @@ const updateProduct = async (id_product, data, currentUser) => {
 |--------------------------------------------------------------------------
 */
 const updateProductFoto = async (id_product, foto, currentUser) => {
+  if (!currentUser) {
+    throw new Error("User tidak valid")
+  }
+
   if (!id_product) {
     throw new Error("ID produk wajib diisi")
   }
@@ -432,6 +549,10 @@ const updateProductFoto = async (id_product, foto, currentUser) => {
 |--------------------------------------------------------------------------
 */
 const deleteProduct = async (id_product, currentUser) => {
+  if (!currentUser) {
+    throw new Error("User tidak valid")
+  }
+
   if (!id_product) {
     throw new Error("ID produk wajib diisi")
   }
