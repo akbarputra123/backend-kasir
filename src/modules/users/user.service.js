@@ -3,30 +3,216 @@ const userModel = require("./user.model")
 
 /*
 |--------------------------------------------------------------------------
-| GET ALL USERS
+| CREATE SERVICE ERROR
 |--------------------------------------------------------------------------
-| Owner melihat semua user di toko miliknya.
-| Admin melihat user pada toko yang sama.
+*/
+const createServiceError = (
+  message,
+  statusCode = 400,
+  code = "USER_SERVICE_ERROR",
+  details = null
+) => {
+  const error = new Error(message)
+
+  error.statusCode = statusCode
+  error.code = code
+
+  if (details) {
+    error.details = details
+  }
+
+  return error
+}
+
+/*
+|--------------------------------------------------------------------------
+| VALIDATE CURRENT USER
+|--------------------------------------------------------------------------
+*/
+const validateCurrentUser = (currentUser) => {
+  if (!currentUser || !currentUser.id_user) {
+    throw createServiceError(
+      "User tidak valid",
+      401,
+      "INVALID_USER"
+    )
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
+| VALIDATE EMAIL
+|--------------------------------------------------------------------------
+*/
+const validateEmail = (email) => {
+  const finalEmail = String(
+    email || ""
+  )
+    .trim()
+    .toLowerCase()
+
+  if (!finalEmail) {
+    throw createServiceError(
+      "Email wajib diisi",
+      422,
+      "EMAIL_REQUIRED"
+    )
+  }
+
+  const emailPattern =
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+  if (!emailPattern.test(finalEmail)) {
+    throw createServiceError(
+      "Format email tidak valid",
+      422,
+      "INVALID_EMAIL"
+    )
+  }
+
+  if (finalEmail.length > 150) {
+    throw createServiceError(
+      "Email maksimal 150 karakter",
+      422,
+      "EMAIL_TOO_LONG"
+    )
+  }
+
+  return finalEmail
+}
+
+/*
+|--------------------------------------------------------------------------
+| VALIDATE PHONE
+|--------------------------------------------------------------------------
+*/
+const validatePhone = (no_hp) => {
+  if (!no_hp) {
+    return null
+  }
+
+  const finalPhone = String(no_hp).trim()
+
+  if (finalPhone.length > 20) {
+    throw createServiceError(
+      "Nomor HP maksimal 20 karakter",
+      422,
+      "PHONE_TOO_LONG"
+    )
+  }
+
+  if (!/^[0-9+\-\s]+$/.test(finalPhone)) {
+    throw createServiceError(
+      "Format nomor HP tidak valid",
+      422,
+      "INVALID_PHONE"
+    )
+  }
+
+  return finalPhone
+}
+
+/*
+|--------------------------------------------------------------------------
+| VALIDATE USER DATA
+|--------------------------------------------------------------------------
+*/
+const validateUserData = (data) => {
+  const finalName = String(
+    data.nama_lengkap || ""
+  ).trim()
+
+  const finalUsername = String(
+    data.username || ""
+  )
+    .trim()
+    .toLowerCase()
+
+  if (!finalName) {
+    throw createServiceError(
+      "Nama lengkap wajib diisi",
+      422,
+      "FULL_NAME_REQUIRED"
+    )
+  }
+
+  if (finalName.length > 150) {
+    throw createServiceError(
+      "Nama lengkap maksimal 150 karakter",
+      422,
+      "FULL_NAME_TOO_LONG"
+    )
+  }
+
+  if (!finalUsername) {
+    throw createServiceError(
+      "Username wajib diisi",
+      422,
+      "USERNAME_REQUIRED"
+    )
+  }
+
+  if (finalUsername.length > 100) {
+    throw createServiceError(
+      "Username maksimal 100 karakter",
+      422,
+      "USERNAME_TOO_LONG"
+    )
+  }
+
+  if (
+    !/^[a-zA-Z0-9._-]+$/.test(
+      finalUsername
+    )
+  ) {
+    throw createServiceError(
+      "Username hanya boleh berisi huruf, angka, titik, garis bawah, dan tanda hubung",
+      422,
+      "INVALID_USERNAME"
+    )
+  }
+
+  return {
+    nama_lengkap: finalName,
+    username: finalUsername,
+    email: validateEmail(data.email),
+    no_hp: validatePhone(data.no_hp)
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
+| GET ALL USERS
 |--------------------------------------------------------------------------
 */
 const getAllUsers = async (currentUser) => {
-  if (!currentUser) {
-    throw new Error("User tidak valid")
-  }
+  validateCurrentUser(currentUser)
 
   if (currentUser.role === "owner") {
-    return await userModel.findAllByOwner(currentUser.id_user)
+    return await userModel.findAllByOwner(
+      currentUser.id_user
+    )
   }
 
   if (currentUser.role === "admin") {
     if (!currentUser.id_store) {
-      throw new Error("Admin belum terhubung dengan toko")
+      throw createServiceError(
+        "Admin belum terhubung dengan toko",
+        403,
+        "ADMIN_STORE_NOT_ASSIGNED"
+      )
     }
 
-    return await userModel.findAllByStore(currentUser.id_store)
+    return await userModel.findAllByStore(
+      currentUser.id_store
+    )
   }
 
-  throw new Error("Anda tidak memiliki akses ke data user")
+  throw createServiceError(
+    "Anda tidak memiliki akses ke data user",
+    403,
+    "FORBIDDEN"
+  )
 }
 
 /*
@@ -34,9 +220,18 @@ const getAllUsers = async (currentUser) => {
 | GET USER BY ID
 |--------------------------------------------------------------------------
 */
-const getUserById = async (id_user, currentUser) => {
+const getUserById = async (
+  id_user,
+  currentUser
+) => {
+  validateCurrentUser(currentUser)
+
   if (!id_user) {
-    throw new Error("ID user wajib diisi")
+    throw createServiceError(
+      "ID user wajib diisi",
+      422,
+      "USER_ID_REQUIRED"
+    )
   }
 
   let user = null
@@ -51,16 +246,29 @@ const getUserById = async (id_user, currentUser) => {
 
     if (
       user &&
-      Number(user.id_store) !== Number(currentUser.id_store)
+      Number(user.id_store) !==
+        Number(currentUser.id_store)
     ) {
-      throw new Error("Anda tidak memiliki akses ke user ini")
+      throw createServiceError(
+        "Anda tidak memiliki akses ke user ini",
+        403,
+        "USER_ACCESS_DENIED"
+      )
     }
   } else {
-    throw new Error("Anda tidak memiliki akses ke data user")
+    throw createServiceError(
+      "Anda tidak memiliki akses ke data user",
+      403,
+      "FORBIDDEN"
+    )
   }
 
   if (!user) {
-    throw new Error("User tidak ditemukan")
+    throw createServiceError(
+      "User tidak ditemukan",
+      404,
+      "USER_NOT_FOUND"
+    )
   }
 
   return user
@@ -68,199 +276,320 @@ const getUserById = async (id_user, currentUser) => {
 
 /*
 |--------------------------------------------------------------------------
-| CREATE USER
+| GET MY USER USAGE
 |--------------------------------------------------------------------------
-| Owner membuat admin/kasir dan menghubungkannya ke toko milik owner.
+| Mengambil jumlah penggunaan batas admin/kasir.
 |--------------------------------------------------------------------------
 */
-const createUser = async (data, currentUser) => {
-  if (!currentUser || currentUser.role !== "owner") {
-    throw new Error("Hanya owner yang dapat menambahkan user")
+const getMyUserUsage = async (currentUser) => {
+  validateCurrentUser(currentUser)
+
+  if (currentUser.role !== "owner") {
+    throw createServiceError(
+      "Hanya owner yang dapat melihat penggunaan paket",
+      403,
+      "FORBIDDEN"
+    )
+  }
+
+  const usage =
+    await userModel.getUserUsageByOwner(
+      currentUser.id_user
+    )
+
+  if (!usage) {
+    throw createServiceError(
+      "Tidak ada langganan aktif",
+      403,
+      "ACTIVE_SUBSCRIPTION_NOT_FOUND"
+    )
+  }
+
+  return usage
+}
+
+/*
+|--------------------------------------------------------------------------
+| CREATE USER
+|--------------------------------------------------------------------------
+*/
+const createUser = async (
+  data,
+  currentUser
+) => {
+  validateCurrentUser(currentUser)
+
+  if (currentUser.role !== "owner") {
+    throw createServiceError(
+      "Hanya owner yang dapat menambahkan user",
+      403,
+      "FORBIDDEN"
+    )
   }
 
   const {
     id_store,
-    nama_lengkap,
-    username,
-    email,
-    no_hp,
     password,
     role,
     status_akun
   } = data
 
-  if (
-    !id_store ||
-    !nama_lengkap ||
-    !username ||
-    !email ||
-    !password ||
-    !role
-  ) {
-    throw new Error(
-      "ID toko, nama lengkap, username, email, password, dan role wajib diisi"
+  if (!id_store) {
+    throw createServiceError(
+      "ID toko wajib diisi",
+      422,
+      "STORE_ID_REQUIRED"
+    )
+  }
+
+  if (!password) {
+    throw createServiceError(
+      "Password wajib diisi",
+      422,
+      "PASSWORD_REQUIRED"
+    )
+  }
+
+  if (String(password).length < 6) {
+    throw createServiceError(
+      "Password minimal 6 karakter",
+      422,
+      "PASSWORD_TOO_SHORT"
     )
   }
 
   if (!["admin", "kasir"].includes(role)) {
-    throw new Error("Role hanya boleh admin atau kasir")
+    throw createServiceError(
+      "Role hanya boleh admin atau kasir",
+      422,
+      "INVALID_ROLE"
+    )
   }
 
-  if (password.length < 6) {
-    throw new Error("Password minimal 6 karakter")
+  const finalStatus =
+    status_akun || "aktif"
+
+  if (
+    !["aktif", "nonaktif"].includes(
+      finalStatus
+    )
+  ) {
+    throw createServiceError(
+      "Status akun hanya boleh aktif atau nonaktif",
+      422,
+      "INVALID_ACCOUNT_STATUS"
+    )
   }
 
-  if (status_akun && !["aktif", "nonaktif"].includes(status_akun)) {
-    throw new Error("Status akun hanya boleh aktif atau nonaktif")
-  }
+  const validatedData =
+    validateUserData(data)
 
-  const store = await userModel.findStoreByIdAndOwner(
-    id_store,
-    currentUser.id_user
+  /*
+  |--------------------------------------------------------------------------
+  | HASH PASSWORD
+  |--------------------------------------------------------------------------
+  */
+  const hashedPassword = await bcrypt.hash(
+    String(password),
+    10
   )
 
-  if (!store) {
-    throw new Error("Toko tidak ditemukan atau bukan milik owner ini")
-  }
-
-  if (store.status_toko !== "aktif") {
-    throw new Error("Toko sedang nonaktif")
-  }
-
-  const usernameExists = await userModel.findByUsername(username)
-
-  if (usernameExists) {
-    throw new Error("Username sudah digunakan")
-  }
-
-  const emailExists = await userModel.findByEmail(email)
-
-  if (emailExists) {
-    throw new Error("Email sudah digunakan")
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 10)
-
-  const user = await userModel.create({
-    id_store,
-    nama_lengkap,
-    username,
-    email,
-    no_hp,
+  /*
+  |--------------------------------------------------------------------------
+  | CREATE WITH PACKAGE LIMIT
+  |--------------------------------------------------------------------------
+  | Pemeriksaan toko, username, email, langganan dan batas user dilakukan
+  | kembali oleh model dalam satu transaction.
+  |--------------------------------------------------------------------------
+  */
+  return await userModel.create({
+    id_owner: currentUser.id_user,
+    id_store: Number(id_store),
+    nama_lengkap:
+      validatedData.nama_lengkap,
+    username: validatedData.username,
+    email: validatedData.email,
+    no_hp: validatedData.no_hp,
     password: hashedPassword,
     role,
-    status_akun: status_akun || "aktif"
+    status_akun: finalStatus
   })
-
-  return {
-    ...user,
-    nama_toko: store.nama_toko
-  }
 }
 
 /*
 |--------------------------------------------------------------------------
 | UPDATE USER
 |--------------------------------------------------------------------------
-| Owner mengubah admin/kasir dan dapat memindahkan user ke toko miliknya.
-|--------------------------------------------------------------------------
 */
-const updateUser = async (id_user, data, currentUser) => {
-  if (!currentUser || currentUser.role !== "owner") {
-    throw new Error("Hanya owner yang dapat memperbarui user")
+const updateUser = async (
+  id_user,
+  data,
+  currentUser
+) => {
+  validateCurrentUser(currentUser)
+
+  if (currentUser.role !== "owner") {
+    throw createServiceError(
+      "Hanya owner yang dapat memperbarui user",
+      403,
+      "FORBIDDEN"
+    )
   }
 
-  const user = await userModel.findByIdAndOwner(
-    id_user,
-    currentUser.id_user
-  )
+  if (!id_user) {
+    throw createServiceError(
+      "ID user wajib diisi",
+      422,
+      "USER_ID_REQUIRED"
+    )
+  }
+
+  const user =
+    await userModel.findByIdAndOwner(
+      id_user,
+      currentUser.id_user
+    )
 
   if (!user) {
-    throw new Error("User tidak ditemukan atau bukan berada di toko milik Anda")
+    throw createServiceError(
+      "User tidak ditemukan atau bukan berada di toko milik Anda",
+      404,
+      "USER_NOT_FOUND"
+    )
   }
 
   if (user.role === "owner") {
-    throw new Error("Akun owner tidak boleh diubah dari module users")
+    throw createServiceError(
+      "Akun owner tidak boleh diubah dari module users",
+      403,
+      "OWNER_UPDATE_NOT_ALLOWED"
+    )
   }
 
-  if (Number(id_user) === Number(currentUser.id_user)) {
-    throw new Error("Anda tidak bisa mengubah akun sendiri dari module users")
+  if (
+    Number(id_user) ===
+    Number(currentUser.id_user)
+  ) {
+    throw createServiceError(
+      "Anda tidak bisa mengubah akun sendiri dari module users",
+      403,
+      "SELF_UPDATE_NOT_ALLOWED"
+    )
   }
 
   const {
     id_store,
-    nama_lengkap,
-    username,
-    email,
-    no_hp,
     role,
     status_akun
   } = data
 
-  if (
-    !id_store ||
-    !nama_lengkap ||
-    !username ||
-    !email ||
-    !role ||
-    !status_akun
-  ) {
-    throw new Error(
-      "ID toko, nama lengkap, username, email, role, dan status akun wajib diisi"
+  if (!id_store) {
+    throw createServiceError(
+      "ID toko wajib diisi",
+      422,
+      "STORE_ID_REQUIRED"
     )
   }
 
   if (!["admin", "kasir"].includes(role)) {
-    throw new Error("Role hanya boleh admin atau kasir")
+    throw createServiceError(
+      "Role hanya boleh admin atau kasir",
+      422,
+      "INVALID_ROLE"
+    )
   }
 
-  if (!["aktif", "nonaktif"].includes(status_akun)) {
-    throw new Error("Status akun hanya boleh aktif atau nonaktif")
+  if (
+    !["aktif", "nonaktif"].includes(
+      status_akun
+    )
+  ) {
+    throw createServiceError(
+      "Status akun hanya boleh aktif atau nonaktif",
+      422,
+      "INVALID_ACCOUNT_STATUS"
+    )
   }
 
-  const store = await userModel.findStoreByIdAndOwner(
-    id_store,
-    currentUser.id_user
-  )
+  const validatedData =
+    validateUserData(data)
+
+  const store =
+    await userModel.findStoreByIdAndOwner(
+      id_store,
+      currentUser.id_user
+    )
 
   if (!store) {
-    throw new Error("Toko tidak ditemukan atau bukan milik owner ini")
+    throw createServiceError(
+      "Toko tidak ditemukan atau bukan milik owner ini",
+      404,
+      "STORE_NOT_FOUND"
+    )
   }
 
   if (store.status_toko !== "aktif") {
-    throw new Error("Toko sedang nonaktif")
+    throw createServiceError(
+      "Toko sedang nonaktif",
+      403,
+      "STORE_INACTIVE"
+    )
   }
 
-  const usernameExists = await userModel.findByUsername(username)
+  const usernameExists =
+    await userModel.findByUsername(
+      validatedData.username
+    )
 
   if (
     usernameExists &&
-    Number(usernameExists.id_user) !== Number(id_user)
+    Number(usernameExists.id_user) !==
+      Number(id_user)
   ) {
-    throw new Error("Username sudah digunakan")
+    throw createServiceError(
+      "Username sudah digunakan",
+      409,
+      "USERNAME_ALREADY_EXISTS"
+    )
   }
 
-  const emailExists = await userModel.findByEmail(email)
+  const emailExists =
+    await userModel.findByEmail(
+      validatedData.email
+    )
 
   if (
     emailExists &&
-    Number(emailExists.id_user) !== Number(id_user)
+    Number(emailExists.id_user) !==
+      Number(id_user)
   ) {
-    throw new Error("Email sudah digunakan")
+    throw createServiceError(
+      "Email sudah digunakan",
+      409,
+      "EMAIL_ALREADY_EXISTS"
+    )
   }
 
-  const updated = await userModel.update(id_user, {
-    id_store,
-    nama_lengkap,
-    username,
-    email,
-    no_hp,
-    role,
-    status_akun
-  })
+  const updated = await userModel.update(
+    id_user,
+    {
+      id_store: Number(id_store),
+      nama_lengkap:
+        validatedData.nama_lengkap,
+      username: validatedData.username,
+      email: validatedData.email,
+      no_hp: validatedData.no_hp,
+      role,
+      status_akun
+    }
+  )
 
   if (!updated) {
-    throw new Error("Gagal memperbarui user")
+    throw createServiceError(
+      "Gagal memperbarui user",
+      500,
+      "USER_UPDATE_FAILED"
+    )
   }
 
   return await userModel.findById(id_user)
@@ -270,54 +599,112 @@ const updateUser = async (id_user, data, currentUser) => {
 |--------------------------------------------------------------------------
 | UPDATE USER PASSWORD
 |--------------------------------------------------------------------------
-| Owner mengubah password admin/kasir yang berada di toko miliknya.
-|--------------------------------------------------------------------------
 */
-const updateUserPassword = async (id_user, data, currentUser) => {
-  if (!currentUser || currentUser.role !== "owner") {
-    throw new Error("Hanya owner yang dapat memperbarui password user")
+const updateUserPassword = async (
+  id_user,
+  data,
+  currentUser
+) => {
+  validateCurrentUser(currentUser)
+
+  if (currentUser.role !== "owner") {
+    throw createServiceError(
+      "Hanya owner yang dapat memperbarui password user",
+      403,
+      "FORBIDDEN"
+    )
   }
 
-  const user = await userModel.findByIdAndOwner(
-    id_user,
-    currentUser.id_user
-  )
+  if (!id_user) {
+    throw createServiceError(
+      "ID user wajib diisi",
+      422,
+      "USER_ID_REQUIRED"
+    )
+  }
+
+  const user =
+    await userModel.findByIdAndOwner(
+      id_user,
+      currentUser.id_user
+    )
 
   if (!user) {
-    throw new Error("User tidak ditemukan atau bukan berada di toko milik Anda")
+    throw createServiceError(
+      "User tidak ditemukan atau bukan berada di toko milik Anda",
+      404,
+      "USER_NOT_FOUND"
+    )
   }
 
   if (user.role === "owner") {
-    throw new Error("Password owner tidak boleh diubah dari module users")
+    throw createServiceError(
+      "Password owner tidak boleh diubah dari module users",
+      403,
+      "OWNER_PASSWORD_UPDATE_NOT_ALLOWED"
+    )
   }
 
-  if (Number(id_user) === Number(currentUser.id_user)) {
-    throw new Error("Anda tidak bisa mengubah password akun sendiri dari module users")
+  if (
+    Number(id_user) ===
+    Number(currentUser.id_user)
+  ) {
+    throw createServiceError(
+      "Anda tidak bisa mengubah password akun sendiri dari module users",
+      403,
+      "SELF_PASSWORD_UPDATE_NOT_ALLOWED"
+    )
   }
 
-  const { password, konfirmasi_password } = data
+  const {
+    password,
+    konfirmasi_password
+  } = data
 
   if (!password) {
-    throw new Error("Password wajib diisi")
+    throw createServiceError(
+      "Password wajib diisi",
+      422,
+      "PASSWORD_REQUIRED"
+    )
   }
 
-  if (password.length < 6) {
-    throw new Error("Password minimal 6 karakter")
+  if (String(password).length < 6) {
+    throw createServiceError(
+      "Password minimal 6 karakter",
+      422,
+      "PASSWORD_TOO_SHORT"
+    )
   }
 
-  if (konfirmasi_password && password !== konfirmasi_password) {
-    throw new Error("Konfirmasi password tidak sama")
+  if (
+    konfirmasi_password &&
+    password !== konfirmasi_password
+  ) {
+    throw createServiceError(
+      "Konfirmasi password tidak sama",
+      422,
+      "PASSWORD_CONFIRMATION_MISMATCH"
+    )
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10)
-
-  const updated = await userModel.updatePassword(
-    id_user,
-    hashedPassword
+  const hashedPassword = await bcrypt.hash(
+    String(password),
+    10
   )
 
+  const updated =
+    await userModel.updatePassword(
+      id_user,
+      hashedPassword
+    )
+
   if (!updated) {
-    throw new Error("Gagal memperbarui password")
+    throw createServiceError(
+      "Gagal memperbarui password",
+      500,
+      "PASSWORD_UPDATE_FAILED"
+    )
   }
 
   return {
@@ -330,35 +717,72 @@ const updateUserPassword = async (id_user, data, currentUser) => {
 |--------------------------------------------------------------------------
 | DELETE USER
 |--------------------------------------------------------------------------
-| Owner menghapus admin/kasir yang berada di toko miliknya.
-|--------------------------------------------------------------------------
 */
-const deleteUser = async (id_user, currentUser) => {
-  if (!currentUser || currentUser.role !== "owner") {
-    throw new Error("Hanya owner yang dapat menghapus user")
+const deleteUser = async (
+  id_user,
+  currentUser
+) => {
+  validateCurrentUser(currentUser)
+
+  if (currentUser.role !== "owner") {
+    throw createServiceError(
+      "Hanya owner yang dapat menghapus user",
+      403,
+      "FORBIDDEN"
+    )
   }
 
-  const user = await userModel.findByIdAndOwner(
-    id_user,
-    currentUser.id_user
-  )
+  if (!id_user) {
+    throw createServiceError(
+      "ID user wajib diisi",
+      422,
+      "USER_ID_REQUIRED"
+    )
+  }
+
+  const user =
+    await userModel.findByIdAndOwner(
+      id_user,
+      currentUser.id_user
+    )
 
   if (!user) {
-    throw new Error("User tidak ditemukan atau bukan berada di toko milik Anda")
+    throw createServiceError(
+      "User tidak ditemukan atau bukan berada di toko milik Anda",
+      404,
+      "USER_NOT_FOUND"
+    )
   }
 
   if (user.role === "owner") {
-    throw new Error("Akun owner tidak boleh dihapus")
+    throw createServiceError(
+      "Akun owner tidak boleh dihapus",
+      403,
+      "OWNER_DELETE_NOT_ALLOWED"
+    )
   }
 
-  if (Number(id_user) === Number(currentUser.id_user)) {
-    throw new Error("Anda tidak bisa menghapus akun sendiri")
+  if (
+    Number(id_user) ===
+    Number(currentUser.id_user)
+  ) {
+    throw createServiceError(
+      "Anda tidak bisa menghapus akun sendiri",
+      403,
+      "SELF_DELETE_NOT_ALLOWED"
+    )
   }
 
-  const deleted = await userModel.remove(id_user)
+  const deleted = await userModel.remove(
+    id_user
+  )
 
   if (!deleted) {
-    throw new Error("Gagal menghapus user")
+    throw createServiceError(
+      "Gagal menghapus user",
+      500,
+      "USER_DELETE_FAILED"
+    )
   }
 
   return {
@@ -370,6 +794,7 @@ const deleteUser = async (id_user, currentUser) => {
 module.exports = {
   getAllUsers,
   getUserById,
+  getMyUserUsage,
   createUser,
   updateUser,
   updateUserPassword,

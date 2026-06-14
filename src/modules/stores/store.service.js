@@ -2,6 +2,57 @@ const storeModel = require("./store.model")
 
 /*
 |--------------------------------------------------------------------------
+| CREATE SERVICE ERROR
+|--------------------------------------------------------------------------
+*/
+const createServiceError = (
+  message,
+  statusCode = 400,
+  code = "STORE_SERVICE_ERROR",
+  details = null
+) => {
+  const error = new Error(message)
+
+  error.statusCode = statusCode
+  error.code = code
+
+  if (details) {
+    error.details = details
+  }
+
+  return error
+}
+
+/*
+|--------------------------------------------------------------------------
+| VALIDATE EMAIL
+|--------------------------------------------------------------------------
+*/
+const validateEmail = (email) => {
+  if (!email) {
+    return null
+  }
+
+  const finalEmail = String(email)
+    .trim()
+    .toLowerCase()
+
+  const emailPattern =
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+  if (!emailPattern.test(finalEmail)) {
+    throw createServiceError(
+      "Format email toko tidak valid",
+      422,
+      "INVALID_STORE_EMAIL"
+    )
+  }
+
+  return finalEmail
+}
+
+/*
+|--------------------------------------------------------------------------
 | VALIDATE PPN
 |--------------------------------------------------------------------------
 */
@@ -10,24 +61,69 @@ const validatePpn = (ppn_aktif, ppn_persen) => {
   const finalPpnPersen = Number(ppn_persen || 0)
 
   if (!["ya", "tidak"].includes(finalPpnAktif)) {
-    throw new Error("PPN aktif hanya boleh ya atau tidak")
+    throw createServiceError(
+      "PPN aktif hanya boleh ya atau tidak",
+      422,
+      "INVALID_PPN_STATUS"
+    )
+  }
+
+  if (!Number.isFinite(finalPpnPersen)) {
+    throw createServiceError(
+      "PPN persen harus berupa angka",
+      422,
+      "INVALID_PPN_PERCENTAGE"
+    )
   }
 
   if (finalPpnPersen < 0) {
-    throw new Error("PPN persen tidak boleh kurang dari 0")
+    throw createServiceError(
+      "PPN persen tidak boleh kurang dari 0",
+      422,
+      "INVALID_PPN_PERCENTAGE"
+    )
   }
 
   if (finalPpnPersen > 100) {
-    throw new Error("PPN persen tidak boleh lebih dari 100")
+    throw createServiceError(
+      "PPN persen tidak boleh lebih dari 100",
+      422,
+      "INVALID_PPN_PERCENTAGE"
+    )
   }
 
-  if (finalPpnAktif === "tidak" && finalPpnPersen > 0) {
-    throw new Error("Jika PPN tidak aktif, nilai PPN harus 0")
+  if (
+    finalPpnAktif === "tidak" &&
+    finalPpnPersen > 0
+  ) {
+    throw createServiceError(
+      "Jika PPN tidak aktif, nilai PPN harus 0",
+      422,
+      "INVALID_PPN_CONFIGURATION"
+    )
   }
 
   return {
     ppn_aktif: finalPpnAktif,
-    ppn_persen: finalPpnAktif === "ya" ? finalPpnPersen : 0
+    ppn_persen:
+      finalPpnAktif === "ya"
+        ? finalPpnPersen
+        : 0
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
+| VALIDATE CURRENT USER
+|--------------------------------------------------------------------------
+*/
+const validateCurrentUser = (currentUser) => {
+  if (!currentUser || !currentUser.id_user) {
+    throw createServiceError(
+      "User tidak valid",
+      401,
+      "INVALID_USER"
+    )
   }
 }
 
@@ -35,10 +131,20 @@ const validatePpn = (ppn_aktif, ppn_persen) => {
 |--------------------------------------------------------------------------
 | GET ALL STORES
 |--------------------------------------------------------------------------
-| Owner bisa melihat semua toko.
-|--------------------------------------------------------------------------
 */
-const getAllStores = async () => {
+const getAllStores = async (currentUser = null) => {
+  if (currentUser) {
+    validateCurrentUser(currentUser)
+
+    if (currentUser.role !== "owner") {
+      throw createServiceError(
+        "Hanya owner yang dapat melihat semua toko",
+        403,
+        "FORBIDDEN"
+      )
+    }
+  }
+
   return await storeModel.findAll()
 }
 
@@ -46,18 +152,55 @@ const getAllStores = async () => {
 |--------------------------------------------------------------------------
 | GET STORE BY ID
 |--------------------------------------------------------------------------
-| Mengambil detail toko berdasarkan id_store.
-|--------------------------------------------------------------------------
 */
-const getStoreById = async (id_store) => {
+const getStoreById = async (
+  id_store,
+  currentUser = null
+) => {
   if (!id_store) {
-    throw new Error("ID toko wajib diisi")
+    throw createServiceError(
+      "ID toko wajib diisi",
+      422,
+      "STORE_ID_REQUIRED"
+    )
   }
 
   const store = await storeModel.findById(id_store)
 
   if (!store) {
-    throw new Error("Toko tidak ditemukan")
+    throw createServiceError(
+      "Toko tidak ditemukan",
+      404,
+      "STORE_NOT_FOUND"
+    )
+  }
+
+  if (currentUser) {
+    validateCurrentUser(currentUser)
+
+    if (
+      currentUser.role === "owner" &&
+      Number(store.id_owner) !==
+        Number(currentUser.id_user)
+    ) {
+      throw createServiceError(
+        "Anda tidak memiliki akses ke toko ini",
+        403,
+        "STORE_ACCESS_DENIED"
+      )
+    }
+
+    if (
+      currentUser.role !== "owner" &&
+      Number(currentUser.id_store) !==
+        Number(store.id_store)
+    ) {
+      throw createServiceError(
+        "Anda tidak memiliki akses ke toko ini",
+        403,
+        "STORE_ACCESS_DENIED"
+      )
+    }
   }
 
   return store
@@ -67,26 +210,34 @@ const getStoreById = async (id_store) => {
 |--------------------------------------------------------------------------
 | GET MY STORES
 |--------------------------------------------------------------------------
-| Mengambil toko berdasarkan owner yang sedang login.
-|--------------------------------------------------------------------------
 */
 const getMyStores = async (currentUser) => {
-  if (!currentUser || !currentUser.id_user) {
-    throw new Error("User tidak valid")
-  }
+  validateCurrentUser(currentUser)
 
   if (currentUser.role === "owner") {
-    return await storeModel.findByOwnerId(currentUser.id_user)
+    return await storeModel.findByOwnerId(
+      currentUser.id_user
+    )
   }
 
   if (!currentUser.id_store) {
-    throw new Error("User belum terhubung dengan toko")
+    throw createServiceError(
+      "User belum terhubung dengan toko",
+      403,
+      "USER_STORE_NOT_ASSIGNED"
+    )
   }
 
-  const store = await storeModel.findById(currentUser.id_store)
+  const store = await storeModel.findById(
+    currentUser.id_store
+  )
 
   if (!store) {
-    throw new Error("Toko tidak ditemukan")
+    throw createServiceError(
+      "Toko tidak ditemukan",
+      404,
+      "STORE_NOT_FOUND"
+    )
   }
 
   return [store]
@@ -94,18 +245,54 @@ const getMyStores = async (currentUser) => {
 
 /*
 |--------------------------------------------------------------------------
+| GET MY STORE USAGE
+|--------------------------------------------------------------------------
+| Menampilkan penggunaan batas toko pada paket owner.
+|--------------------------------------------------------------------------
+*/
+const getMyStoreUsage = async (currentUser) => {
+  validateCurrentUser(currentUser)
+
+  if (currentUser.role !== "owner") {
+    throw createServiceError(
+      "Hanya owner yang dapat melihat penggunaan paket",
+      403,
+      "FORBIDDEN"
+    )
+  }
+
+  const usage =
+    await storeModel.getStoreUsageByOwner(
+      currentUser.id_user
+    )
+
+  if (!usage) {
+    throw createServiceError(
+      "Tidak ada langganan aktif",
+      403,
+      "ACTIVE_SUBSCRIPTION_NOT_FOUND"
+    )
+  }
+
+  return usage
+}
+
+/*
+|--------------------------------------------------------------------------
 | CREATE STORE
 |--------------------------------------------------------------------------
-| Owner membuat toko baru.
+| Pengecekan batas toko dilakukan langsung di model dalam transaction.
 |--------------------------------------------------------------------------
 */
 const createStore = async (data, currentUser) => {
-  if (!currentUser || !currentUser.id_user) {
-    throw new Error("User tidak valid")
-  }
+  validateCurrentUser(currentUser)
 
   if (currentUser.role !== "owner") {
-    throw new Error("Hanya owner yang dapat membuat toko")
+    throw createServiceError(
+      "Hanya owner yang dapat membuat toko",
+      403,
+      "FORBIDDEN"
+    )
   }
 
   const {
@@ -119,79 +306,125 @@ const createStore = async (data, currentUser) => {
     ppn_persen
   } = data
 
-  if (!nama_toko) {
-    throw new Error("Nama toko wajib diisi")
-  }
+  const finalNamaToko =
+    String(nama_toko || "").trim()
 
-  if (status_toko && !["aktif", "nonaktif"].includes(status_toko)) {
-    throw new Error("Status toko hanya boleh aktif atau nonaktif")
-  }
-
-  const ppn = validatePpn(ppn_aktif, ppn_persen)
-
-  const storeExists = await storeModel.findByNameAndOwner(
-    nama_toko,
-    currentUser.id_user
-  )
-
-  if (storeExists) {
-    throw new Error("Nama toko sudah digunakan")
-  }
-
-  const store = await storeModel.create({
-    id_owner: currentUser.id_user,
-    nama_toko,
-    alamat,
-    no_hp,
-    email,
-    logo,
-    status_toko: status_toko || "aktif",
-    ppn_aktif: ppn.ppn_aktif,
-    ppn_persen: ppn.ppn_persen
-  })
-
-  /*
-  |--------------------------------------------------------------------------
-  | HUBUNGKAN OWNER KE TOKO PERTAMA
-  |--------------------------------------------------------------------------
-  | Jika owner belum punya id_store, maka toko pertama akan langsung dijadikan
-  | toko aktif milik owner.
-  |--------------------------------------------------------------------------
-  */
-  if (!currentUser.id_store) {
-    await storeModel.assignStoreToUser(
-      currentUser.id_user,
-      store.id_store
+  if (!finalNamaToko) {
+    throw createServiceError(
+      "Nama toko wajib diisi",
+      422,
+      "STORE_NAME_REQUIRED"
     )
   }
 
-  return store
+  if (finalNamaToko.length > 150) {
+    throw createServiceError(
+      "Nama toko maksimal 150 karakter",
+      422,
+      "STORE_NAME_TOO_LONG"
+    )
+  }
+
+  const finalStatusToko =
+    status_toko || "aktif"
+
+  if (
+    !["aktif", "nonaktif"].includes(
+      finalStatusToko
+    )
+  ) {
+    throw createServiceError(
+      "Status toko hanya boleh aktif atau nonaktif",
+      422,
+      "INVALID_STORE_STATUS"
+    )
+  }
+
+  const finalNoHp = no_hp
+    ? String(no_hp).trim()
+    : null
+
+  if (finalNoHp && finalNoHp.length > 20) {
+    throw createServiceError(
+      "Nomor HP maksimal 20 karakter",
+      422,
+      "STORE_PHONE_TOO_LONG"
+    )
+  }
+
+  const finalEmail = validateEmail(email)
+  const ppn = validatePpn(ppn_aktif, ppn_persen)
+
+  /*
+  |--------------------------------------------------------------------------
+  | Tidak perlu findByNameAndOwner dan countByOwner di service.
+  |--------------------------------------------------------------------------
+  | Pemeriksaan dilakukan ulang di dalam transaction model sehingga aman dari
+  | request bersamaan.
+  |--------------------------------------------------------------------------
+  */
+  return await storeModel.create({
+    id_owner: currentUser.id_user,
+    nama_toko: finalNamaToko,
+    alamat: alamat
+      ? String(alamat).trim()
+      : null,
+    no_hp: finalNoHp,
+    email: finalEmail,
+    logo: logo || null,
+    status_toko: finalStatusToko,
+    ppn_aktif: ppn.ppn_aktif,
+    ppn_persen: ppn.ppn_persen
+  })
 }
 
 /*
 |--------------------------------------------------------------------------
 | UPDATE STORE
 |--------------------------------------------------------------------------
-| Owner memperbarui data toko.
-|--------------------------------------------------------------------------
 */
-const updateStore = async (id_store, data, currentUser) => {
+const updateStore = async (
+  id_store,
+  data,
+  currentUser
+) => {
+  validateCurrentUser(currentUser)
+
   if (!id_store) {
-    throw new Error("ID toko wajib diisi")
+    throw createServiceError(
+      "ID toko wajib diisi",
+      422,
+      "STORE_ID_REQUIRED"
+    )
   }
 
   const store = await storeModel.findById(id_store)
 
   if (!store) {
-    throw new Error("Toko tidak ditemukan")
+    throw createServiceError(
+      "Toko tidak ditemukan",
+      404,
+      "STORE_NOT_FOUND"
+    )
   }
 
   if (currentUser.role !== "owner") {
-    throw new Error("Hanya owner yang dapat memperbarui toko")
+    throw createServiceError(
+      "Hanya owner yang dapat memperbarui toko",
+      403,
+      "FORBIDDEN"
+    )
   }
 
-  if (Number(store.id_owner) !== Number(currentUser.id_user)) {
-    throw new Error("Anda tidak memiliki akses ke toko ini")
+  if (
+    Number(store.id_owner) !==
+    Number(currentUser.id_user)
+  ) {
+    throw createServiceError(
+      "Anda tidak memiliki akses ke toko ini",
+      403,
+      "STORE_ACCESS_DENIED"
+    )
   }
 
   const {
@@ -205,45 +438,98 @@ const updateStore = async (id_store, data, currentUser) => {
     ppn_persen
   } = data
 
-  if (!nama_toko) {
-    throw new Error("Nama toko wajib diisi")
+  const finalNamaToko =
+    String(nama_toko || "").trim()
+
+  if (!finalNamaToko) {
+    throw createServiceError(
+      "Nama toko wajib diisi",
+      422,
+      "STORE_NAME_REQUIRED"
+    )
+  }
+
+  if (finalNamaToko.length > 150) {
+    throw createServiceError(
+      "Nama toko maksimal 150 karakter",
+      422,
+      "STORE_NAME_TOO_LONG"
+    )
   }
 
   if (!status_toko) {
-    throw new Error("Status toko wajib diisi")
+    throw createServiceError(
+      "Status toko wajib diisi",
+      422,
+      "STORE_STATUS_REQUIRED"
+    )
   }
 
-  if (!["aktif", "nonaktif"].includes(status_toko)) {
-    throw new Error("Status toko hanya boleh aktif atau nonaktif")
+  if (
+    !["aktif", "nonaktif"].includes(status_toko)
+  ) {
+    throw createServiceError(
+      "Status toko hanya boleh aktif atau nonaktif",
+      422,
+      "INVALID_STORE_STATUS"
+    )
   }
 
+  const finalNoHp = no_hp
+    ? String(no_hp).trim()
+    : null
+
+  if (finalNoHp && finalNoHp.length > 20) {
+    throw createServiceError(
+      "Nomor HP maksimal 20 karakter",
+      422,
+      "STORE_PHONE_TOO_LONG"
+    )
+  }
+
+  const finalEmail = validateEmail(email)
   const ppn = validatePpn(ppn_aktif, ppn_persen)
 
-  const storeNameExists = await storeModel.findByNameAndOwner(
-    nama_toko,
-    currentUser.id_user
-  )
+  const storeNameExists =
+    await storeModel.findByNameAndOwner(
+      finalNamaToko,
+      currentUser.id_user
+    )
 
   if (
     storeNameExists &&
-    Number(storeNameExists.id_store) !== Number(id_store)
+    Number(storeNameExists.id_store) !==
+      Number(id_store)
   ) {
-    throw new Error("Nama toko sudah digunakan")
+    throw createServiceError(
+      "Nama toko sudah digunakan",
+      409,
+      "STORE_NAME_ALREADY_EXISTS"
+    )
   }
 
-  const updated = await storeModel.update(id_store, {
-    nama_toko,
-    alamat,
-    no_hp,
-    email,
-    logo: logo || store.logo,
-    status_toko,
-    ppn_aktif: ppn.ppn_aktif,
-    ppn_persen: ppn.ppn_persen
-  })
+  const updated = await storeModel.update(
+    id_store,
+    {
+      nama_toko: finalNamaToko,
+      alamat: alamat
+        ? String(alamat).trim()
+        : null,
+      no_hp: finalNoHp,
+      email: finalEmail,
+      logo: logo || store.logo,
+      status_toko,
+      ppn_aktif: ppn.ppn_aktif,
+      ppn_persen: ppn.ppn_persen
+    }
+  )
 
   if (!updated) {
-    throw new Error("Gagal memperbarui toko")
+    throw createServiceError(
+      "Gagal memperbarui toko",
+      500,
+      "STORE_UPDATE_FAILED"
+    )
   }
 
   return await storeModel.findById(id_store)
@@ -253,36 +539,70 @@ const updateStore = async (id_store, data, currentUser) => {
 |--------------------------------------------------------------------------
 | UPDATE STORE LOGO
 |--------------------------------------------------------------------------
-| Memperbarui logo toko.
-|--------------------------------------------------------------------------
 */
-const updateStoreLogo = async (id_store, logo, currentUser) => {
+const updateStoreLogo = async (
+  id_store,
+  logo,
+  currentUser
+) => {
+  validateCurrentUser(currentUser)
+
   if (!id_store) {
-    throw new Error("ID toko wajib diisi")
+    throw createServiceError(
+      "ID toko wajib diisi",
+      422,
+      "STORE_ID_REQUIRED"
+    )
   }
 
   if (!logo) {
-    throw new Error("Logo toko wajib diisi")
+    throw createServiceError(
+      "Logo toko wajib diisi",
+      422,
+      "STORE_LOGO_REQUIRED"
+    )
   }
 
   const store = await storeModel.findById(id_store)
 
   if (!store) {
-    throw new Error("Toko tidak ditemukan")
+    throw createServiceError(
+      "Toko tidak ditemukan",
+      404,
+      "STORE_NOT_FOUND"
+    )
   }
 
   if (currentUser.role !== "owner") {
-    throw new Error("Hanya owner yang dapat memperbarui logo toko")
+    throw createServiceError(
+      "Hanya owner yang dapat memperbarui logo toko",
+      403,
+      "FORBIDDEN"
+    )
   }
 
-  if (Number(store.id_owner) !== Number(currentUser.id_user)) {
-    throw new Error("Anda tidak memiliki akses ke toko ini")
+  if (
+    Number(store.id_owner) !==
+    Number(currentUser.id_user)
+  ) {
+    throw createServiceError(
+      "Anda tidak memiliki akses ke toko ini",
+      403,
+      "STORE_ACCESS_DENIED"
+    )
   }
 
-  const updated = await storeModel.updateLogo(id_store, logo)
+  const updated = await storeModel.updateLogo(
+    id_store,
+    logo
+  )
 
   if (!updated) {
-    throw new Error("Gagal memperbarui logo toko")
+    throw createServiceError(
+      "Gagal memperbarui logo toko",
+      500,
+      "STORE_LOGO_UPDATE_FAILED"
+    )
   }
 
   return await storeModel.findById(id_store)
@@ -292,32 +612,58 @@ const updateStoreLogo = async (id_store, logo, currentUser) => {
 |--------------------------------------------------------------------------
 | DELETE STORE
 |--------------------------------------------------------------------------
-| Owner menghapus toko.
-|--------------------------------------------------------------------------
 */
-const deleteStore = async (id_store, currentUser) => {
+const deleteStore = async (
+  id_store,
+  currentUser
+) => {
+  validateCurrentUser(currentUser)
+
   if (!id_store) {
-    throw new Error("ID toko wajib diisi")
+    throw createServiceError(
+      "ID toko wajib diisi",
+      422,
+      "STORE_ID_REQUIRED"
+    )
   }
 
   const store = await storeModel.findById(id_store)
 
   if (!store) {
-    throw new Error("Toko tidak ditemukan")
+    throw createServiceError(
+      "Toko tidak ditemukan",
+      404,
+      "STORE_NOT_FOUND"
+    )
   }
 
   if (currentUser.role !== "owner") {
-    throw new Error("Hanya owner yang dapat menghapus toko")
+    throw createServiceError(
+      "Hanya owner yang dapat menghapus toko",
+      403,
+      "FORBIDDEN"
+    )
   }
 
-  if (Number(store.id_owner) !== Number(currentUser.id_user)) {
-    throw new Error("Anda tidak memiliki akses ke toko ini")
+  if (
+    Number(store.id_owner) !==
+    Number(currentUser.id_user)
+  ) {
+    throw createServiceError(
+      "Anda tidak memiliki akses ke toko ini",
+      403,
+      "STORE_ACCESS_DENIED"
+    )
   }
 
   const deleted = await storeModel.remove(id_store)
 
   if (!deleted) {
-    throw new Error("Gagal menghapus toko")
+    throw createServiceError(
+      "Gagal menghapus toko",
+      500,
+      "STORE_DELETE_FAILED"
+    )
   }
 
   return {
@@ -330,6 +676,7 @@ module.exports = {
   getAllStores,
   getStoreById,
   getMyStores,
+  getMyStoreUsage,
   createStore,
   updateStore,
   updateStoreLogo,

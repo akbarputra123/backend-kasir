@@ -2,77 +2,62 @@ const productModel = require("./product.model")
 
 /*
 |--------------------------------------------------------------------------
-| GET ALL PRODUCTS
+| CREATE SERVICE ERROR
 |--------------------------------------------------------------------------
 */
-const getAllProducts = async (currentUser) => {
-  if (!currentUser) {
-    throw new Error("User tidak valid")
+const createServiceError = (
+  message,
+  statusCode = 400,
+  code = "PRODUCT_SERVICE_ERROR",
+  details = null
+) => {
+  const error = new Error(message)
+
+  error.statusCode = statusCode
+  error.code = code
+
+  if (details) {
+    error.details = details
   }
 
-  if (currentUser.role === "owner") {
-    return await productModel.findAllByOwner(currentUser.id_user)
-  }
-
-  if (["admin", "kasir"].includes(currentUser.role)) {
-    if (!currentUser.id_store) {
-      throw new Error("User belum terhubung dengan toko")
-    }
-
-    return await productModel.findAllByStore(currentUser.id_store)
-  }
-
-  throw new Error("Anda tidak memiliki akses ke produk")
+  return error
 }
 
 /*
 |--------------------------------------------------------------------------
-| GET PRODUCT BY ID
+| VALIDATE CURRENT USER
 |--------------------------------------------------------------------------
 */
-const getProductById = async (id_product, currentUser) => {
-  if (!currentUser) {
-    throw new Error("User tidak valid")
+const validateCurrentUser = (currentUser) => {
+  if (!currentUser || !currentUser.id_user) {
+    throw createServiceError(
+      "User tidak valid",
+      401,
+      "INVALID_USER"
+    )
   }
-
-  if (!id_product) {
-    throw new Error("ID produk wajib diisi")
-  }
-
-  const product = await productModel.findById(id_product)
-
-  if (!product) {
-    throw new Error("Produk tidak ditemukan")
-  }
-
-  if (currentUser.role === "owner") {
-    if (Number(product.id_owner) !== Number(currentUser.id_user)) {
-      throw new Error("Anda tidak memiliki akses ke produk ini")
-    }
-  } else if (["admin", "kasir"].includes(currentUser.role)) {
-    if (Number(product.id_store) !== Number(currentUser.id_store)) {
-      throw new Error("Anda tidak memiliki akses ke produk ini")
-    }
-  } else {
-    throw new Error("Anda tidak memiliki akses ke produk")
-  }
-
-  return product
 }
 
 /*
 |--------------------------------------------------------------------------
-| HELPER: NORMALIZE EMPTY VALUE
+| NORMALIZE EMPTY VALUE
 |--------------------------------------------------------------------------
 */
 const emptyToNull = (value) => {
-  if (value === undefined || value === null) {
+  if (
+    value === undefined ||
+    value === null
+  ) {
     return null
   }
 
-  const stringValue = value.toString().trim()
+  const stringValue = String(value).trim()
 
-  if (stringValue === "" || stringValue === "null" || stringValue === "-") {
+  if (
+    stringValue === "" ||
+    stringValue.toLowerCase() === "null" ||
+    stringValue === "-"
+  ) {
     return null
   }
 
@@ -81,10 +66,13 @@ const emptyToNull = (value) => {
 
 /*
 |--------------------------------------------------------------------------
-| HELPER: TO NUMBER
+| TO NUMBER
 |--------------------------------------------------------------------------
 */
-const toNumber = (value, defaultValue = 0) => {
+const toNumber = (
+  value,
+  defaultValue = 0
+) => {
   const cleanValue = emptyToNull(value)
 
   if (cleanValue === null) {
@@ -93,8 +81,12 @@ const toNumber = (value, defaultValue = 0) => {
 
   const numberValue = Number(cleanValue)
 
-  if (Number.isNaN(numberValue)) {
-    return defaultValue
+  if (!Number.isFinite(numberValue)) {
+    throw createServiceError(
+      `Nilai ${value} harus berupa angka`,
+      422,
+      "INVALID_NUMBER"
+    )
   }
 
   return numberValue
@@ -102,7 +94,7 @@ const toNumber = (value, defaultValue = 0) => {
 
 /*
 |--------------------------------------------------------------------------
-| HELPER: TO ID
+| TO ID
 |--------------------------------------------------------------------------
 */
 const toId = (value) => {
@@ -114,7 +106,10 @@ const toId = (value) => {
 
   const numberValue = Number(cleanValue)
 
-  if (Number.isNaN(numberValue) || numberValue <= 0) {
+  if (
+    !Number.isInteger(numberValue) ||
+    numberValue <= 0
+  ) {
     return null
   }
 
@@ -123,61 +118,127 @@ const toId = (value) => {
 
 /*
 |--------------------------------------------------------------------------
-| HELPER: TO STRING
+| TO STRING
 |--------------------------------------------------------------------------
 */
-const toStringValue = (value, defaultValue = "") => {
+const toStringValue = (
+  value,
+  defaultValue = ""
+) => {
   const cleanValue = emptyToNull(value)
 
   if (cleanValue === null) {
     return defaultValue
   }
 
-  return cleanValue.toString().trim()
+  return String(cleanValue).trim()
 }
 
 /*
 |--------------------------------------------------------------------------
-| VALIDATE NUMBER
+| VALIDATE NUMBER MINIMUM ZERO
 |--------------------------------------------------------------------------
 */
-const validateNumberMinZero = (value, fieldName) => {
-  if (Number(value || 0) < 0) {
-    throw new Error(`${fieldName} tidak boleh kurang dari 0`)
+const validateNumberMinZero = (
+  value,
+  fieldName
+) => {
+  if (!Number.isFinite(Number(value))) {
+    throw createServiceError(
+      `${fieldName} harus berupa angka`,
+      422,
+      "INVALID_NUMBER"
+    )
+  }
+
+  if (Number(value) < 0) {
+    throw createServiceError(
+      `${fieldName} tidak boleh kurang dari 0`,
+      422,
+      "NUMBER_BELOW_ZERO"
+    )
   }
 }
 
 /*
 |--------------------------------------------------------------------------
-| VALIDATE PRODUCT DISCOUNT
+| VALIDATE INTEGER MINIMUM ZERO
 |--------------------------------------------------------------------------
 */
-const validateDiscount = async (id_discount, id_store) => {
+const validateIntegerMinZero = (
+  value,
+  fieldName
+) => {
+  validateNumberMinZero(value, fieldName)
+
+  if (!Number.isInteger(Number(value))) {
+    throw createServiceError(
+      `${fieldName} harus berupa bilangan bulat`,
+      422,
+      "INVALID_INTEGER"
+    )
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
+| VALIDATE DISCOUNT
+|--------------------------------------------------------------------------
+*/
+const validateDiscount = async (
+  id_discount,
+  id_store
+) => {
   if (!id_discount) {
     return null
   }
 
-  const discount = await productModel.findDiscountByIdAndStore(
-    id_discount,
-    id_store
-  )
+  const discount =
+    await productModel.findDiscountByIdAndStore(
+      id_discount,
+      id_store
+    )
 
   if (!discount) {
-    throw new Error("Diskon tidak ditemukan pada toko ini")
+    throw createServiceError(
+      "Diskon tidak ditemukan pada toko ini",
+      404,
+      "DISCOUNT_NOT_FOUND"
+    )
   }
 
-  if (discount.status_diskon !== "aktif") {
-    throw new Error("Diskon sedang nonaktif")
+  if (
+    discount.status_diskon !== "aktif"
+  ) {
+    throw createServiceError(
+      "Diskon sedang nonaktif",
+      403,
+      "DISCOUNT_INACTIVE"
+    )
   }
 
   const now = new Date()
 
-  if (discount.tanggal_mulai && now < new Date(discount.tanggal_mulai)) {
-    throw new Error("Diskon belum mulai")
+  if (
+    discount.tanggal_mulai &&
+    now < new Date(discount.tanggal_mulai)
+  ) {
+    throw createServiceError(
+      "Diskon belum mulai",
+      422,
+      "DISCOUNT_NOT_STARTED"
+    )
   }
 
-  if (discount.tanggal_berakhir && now > new Date(discount.tanggal_berakhir)) {
-    throw new Error("Diskon sudah berakhir")
+  if (
+    discount.tanggal_berakhir &&
+    now > new Date(discount.tanggal_berakhir)
+  ) {
+    throw createServiceError(
+      "Diskon sudah berakhir",
+      422,
+      "DISCOUNT_EXPIRED"
+    )
   }
 
   return discount
@@ -187,29 +248,319 @@ const validateDiscount = async (id_discount, id_store) => {
 |--------------------------------------------------------------------------
 | NORMALIZE PRODUCT DATA
 |--------------------------------------------------------------------------
-| Data dari JSON dan multipart/form-data dibuat seragam.
-|--------------------------------------------------------------------------
 */
-const normalizeProductData = (data = {}) => {
+const normalizeProductData = (
+  data = {}
+) => {
   return {
     id_store: toId(data.id_store),
     id_category: toId(data.id_category),
     id_discount: toId(data.id_discount),
 
-    kode_produk: toStringValue(data.kode_produk),
-    barcode: toStringValue(data.barcode),
-    nama_produk: toStringValue(data.nama_produk),
-    deskripsi: toStringValue(data.deskripsi),
+    kode_produk: toStringValue(
+      data.kode_produk
+    ),
 
-    harga_beli: toNumber(data.harga_beli, 0),
-    harga_jual: toNumber(data.harga_jual, 0),
-    stok: toNumber(data.stok, 0),
-    stok_minimum: toNumber(data.stok_minimum, 0),
+    barcode: toStringValue(
+      data.barcode
+    ),
 
-    satuan: toStringValue(data.satuan, "pcs"),
+    nama_produk: toStringValue(
+      data.nama_produk
+    ),
+
+    deskripsi: toStringValue(
+      data.deskripsi
+    ),
+
+    harga_beli: toNumber(
+      data.harga_beli,
+      0
+    ),
+
+    harga_jual: toNumber(
+      data.harga_jual,
+      0
+    ),
+
+    stok: toNumber(
+      data.stok,
+      0
+    ),
+
+    stok_minimum: toNumber(
+      data.stok_minimum,
+      0
+    ),
+
+    satuan: toStringValue(
+      data.satuan,
+      "pcs"
+    ),
+
     foto: emptyToNull(data.foto),
-    status_produk: toStringValue(data.status_produk, "aktif")
+
+    status_produk: toStringValue(
+      data.status_produk,
+      "aktif"
+    )
   }
+}
+
+/*
+|--------------------------------------------------------------------------
+| VALIDATE PRODUCT FIELDS
+|--------------------------------------------------------------------------
+*/
+const validateProductFields = (
+  product
+) => {
+  if (!product.kode_produk) {
+    throw createServiceError(
+      "Kode produk wajib diisi",
+      422,
+      "PRODUCT_CODE_REQUIRED"
+    )
+  }
+
+  if (!product.nama_produk) {
+    throw createServiceError(
+      "Nama produk wajib diisi",
+      422,
+      "PRODUCT_NAME_REQUIRED"
+    )
+  }
+
+  if (product.kode_produk.length > 100) {
+    throw createServiceError(
+      "Kode produk maksimal 100 karakter",
+      422,
+      "PRODUCT_CODE_TOO_LONG"
+    )
+  }
+
+  if (
+    product.barcode &&
+    product.barcode.length > 100
+  ) {
+    throw createServiceError(
+      "Barcode maksimal 100 karakter",
+      422,
+      "BARCODE_TOO_LONG"
+    )
+  }
+
+  if (product.nama_produk.length > 150) {
+    throw createServiceError(
+      "Nama produk maksimal 150 karakter",
+      422,
+      "PRODUCT_NAME_TOO_LONG"
+    )
+  }
+
+  if (
+    !["aktif", "nonaktif"].includes(
+      product.status_produk
+    )
+  ) {
+    throw createServiceError(
+      "Status produk hanya boleh aktif atau nonaktif",
+      422,
+      "INVALID_PRODUCT_STATUS"
+    )
+  }
+
+  validateNumberMinZero(
+    product.harga_beli,
+    "Harga beli"
+  )
+
+  validateNumberMinZero(
+    product.harga_jual,
+    "Harga jual"
+  )
+
+  validateIntegerMinZero(
+    product.stok,
+    "Stok"
+  )
+
+  validateIntegerMinZero(
+    product.stok_minimum,
+    "Stok minimum"
+  )
+}
+
+/*
+|--------------------------------------------------------------------------
+| GET ALL PRODUCTS
+|--------------------------------------------------------------------------
+*/
+const getAllProducts = async (
+  currentUser
+) => {
+  validateCurrentUser(currentUser)
+
+  if (currentUser.role === "owner") {
+    return await productModel.findAllByOwner(
+      currentUser.id_user
+    )
+  }
+
+  if (
+    ["admin", "kasir"].includes(
+      currentUser.role
+    )
+  ) {
+    if (!currentUser.id_store) {
+      throw createServiceError(
+        "User belum terhubung dengan toko",
+        403,
+        "USER_STORE_NOT_ASSIGNED"
+      )
+    }
+
+    return await productModel.findAllByStore(
+      currentUser.id_store
+    )
+  }
+
+  throw createServiceError(
+    "Anda tidak memiliki akses ke produk",
+    403,
+    "FORBIDDEN"
+  )
+}
+
+/*
+|--------------------------------------------------------------------------
+| GET PRODUCT BY ID
+|--------------------------------------------------------------------------
+*/
+const getProductById = async (
+  id_product,
+  currentUser
+) => {
+  validateCurrentUser(currentUser)
+
+  if (!id_product) {
+    throw createServiceError(
+      "ID produk wajib diisi",
+      422,
+      "PRODUCT_ID_REQUIRED"
+    )
+  }
+
+  const product =
+    await productModel.findById(id_product)
+
+  if (!product) {
+    throw createServiceError(
+      "Produk tidak ditemukan",
+      404,
+      "PRODUCT_NOT_FOUND"
+    )
+  }
+
+  if (currentUser.role === "owner") {
+    if (
+      Number(product.id_owner) !==
+      Number(currentUser.id_user)
+    ) {
+      throw createServiceError(
+        "Anda tidak memiliki akses ke produk ini",
+        403,
+        "PRODUCT_ACCESS_DENIED"
+      )
+    }
+  } else if (
+    ["admin", "kasir"].includes(
+      currentUser.role
+    )
+  ) {
+    if (
+      Number(product.id_store) !==
+      Number(currentUser.id_store)
+    ) {
+      throw createServiceError(
+        "Anda tidak memiliki akses ke produk ini",
+        403,
+        "PRODUCT_ACCESS_DENIED"
+      )
+    }
+  } else {
+    throw createServiceError(
+      "Anda tidak memiliki akses ke produk",
+      403,
+      "FORBIDDEN"
+    )
+  }
+
+  return product
+}
+
+/*
+|--------------------------------------------------------------------------
+| GET PRODUCT USAGE
+|--------------------------------------------------------------------------
+*/
+const getMyProductUsage = async (
+  currentUser
+) => {
+  validateCurrentUser(currentUser)
+
+  let idOwner = null
+
+  if (currentUser.role === "owner") {
+    idOwner = currentUser.id_user
+  } else if (
+    ["admin", "kasir"].includes(
+      currentUser.role
+    )
+  ) {
+    if (!currentUser.id_store) {
+      throw createServiceError(
+        "User belum terhubung dengan toko",
+        403,
+        "USER_STORE_NOT_ASSIGNED"
+      )
+    }
+
+    const productStore =
+      await productModel.findAllByStore(
+        currentUser.id_store
+      )
+
+    // Penggunaan paket sebaiknya hanya ditampilkan kepada owner.
+    throw createServiceError(
+      "Hanya owner yang dapat melihat penggunaan paket produk",
+      403,
+      "FORBIDDEN"
+    )
+  }
+
+  if (!idOwner) {
+    throw createServiceError(
+      "Anda tidak memiliki akses",
+      403,
+      "FORBIDDEN"
+    )
+  }
+
+  const usage =
+    await productModel.getProductUsageByOwner(
+      idOwner
+    )
+
+  if (!usage) {
+    throw createServiceError(
+      "Tidak ada langganan aktif",
+      403,
+      "ACTIVE_SUBSCRIPTION_NOT_FOUND"
+    )
+  }
+
+  return usage
 }
 
 /*
@@ -217,126 +568,120 @@ const normalizeProductData = (data = {}) => {
 | CREATE PRODUCT
 |--------------------------------------------------------------------------
 */
-const createProduct = async (data = {}, currentUser) => {
-  if (!currentUser) {
-    throw new Error("User tidak valid")
+const createProduct = async (
+  data = {},
+  currentUser
+) => {
+  validateCurrentUser(currentUser)
+
+  if (
+    !["owner", "admin"].includes(
+      currentUser.role
+    )
+  ) {
+    throw createServiceError(
+      "Hanya owner atau admin yang dapat menambahkan produk",
+      403,
+      "FORBIDDEN"
+    )
   }
 
-  if (!["owner", "admin"].includes(currentUser.role)) {
-    throw new Error("Hanya owner atau admin yang dapat menambahkan produk")
-  }
+  const product =
+    normalizeProductData(data)
 
-  const {
-    id_store,
-    id_category,
-    id_discount,
-    kode_produk,
-    barcode,
-    nama_produk,
-    deskripsi,
-    harga_beli,
-    harga_jual,
-    stok,
-    stok_minimum,
-    satuan,
-    foto,
-    status_produk
-  } = normalizeProductData(data)
+  validateProductFields(product)
 
-  if (!kode_produk || !nama_produk) {
-    throw new Error("Kode produk dan nama produk wajib diisi")
-  }
-
-  validateNumberMinZero(harga_beli, "Harga beli")
-  validateNumberMinZero(harga_jual, "Harga jual")
-  validateNumberMinZero(stok, "Stok")
-  validateNumberMinZero(stok_minimum, "Stok minimum")
-
-  if (status_produk && !["aktif", "nonaktif"].includes(status_produk)) {
-    throw new Error("Status produk hanya boleh aktif atau nonaktif")
-  }
-
-  let finalStoreId = id_store
+  let finalStoreId = product.id_store
 
   if (currentUser.role === "owner") {
-    if (!id_store) {
-      throw new Error("ID toko wajib diisi")
-    }
-
-    const store = await productModel.findStoreByIdAndOwner(
-      id_store,
-      currentUser.id_user
-    )
-
-    if (!store) {
-      throw new Error("Toko tidak ditemukan atau bukan milik owner ini")
-    }
-
-    if (store.status_toko !== "aktif") {
-      throw new Error("Toko sedang nonaktif")
+    if (!finalStoreId) {
+      throw createServiceError(
+        "ID toko wajib diisi",
+        422,
+        "STORE_ID_REQUIRED"
+      )
     }
   }
 
   if (currentUser.role === "admin") {
     if (!currentUser.id_store) {
-      throw new Error("Admin belum terhubung dengan toko")
+      throw createServiceError(
+        "Admin belum terhubung dengan toko",
+        403,
+        "ADMIN_STORE_NOT_ASSIGNED"
+      )
     }
 
-    finalStoreId = currentUser.id_store
+    /*
+    |--------------------------------------------------------------------------
+    | Abaikan id_store dari body untuk admin.
+    |--------------------------------------------------------------------------
+    */
+    finalStoreId =
+      Number(currentUser.id_store)
   }
 
-  if (id_category) {
-    const category = await productModel.findCategoryByIdAndStore(
-      id_category,
-      finalStoreId
-    )
-
-    if (!category) {
-      throw new Error("Kategori tidak ditemukan pada toko ini")
-    }
-
-    if (category.status_kategori !== "aktif") {
-      throw new Error("Kategori sedang nonaktif")
-    }
-  }
-
-  await validateDiscount(id_discount, finalStoreId)
-
-  const kodeExists = await productModel.findByKodeAndStore(
-    kode_produk,
-    finalStoreId
-  )
-
-  if (kodeExists) {
-    throw new Error("Kode produk sudah digunakan pada toko ini")
-  }
-
-  if (barcode) {
-    const barcodeExists = await productModel.findByBarcodeAndStore(
-      barcode,
-      finalStoreId
-    )
-
-    if (barcodeExists) {
-      throw new Error("Barcode sudah digunakan pada toko ini")
-    }
-  }
-
+  /*
+  |--------------------------------------------------------------------------
+  | CREATE IN TRANSACTION
+  |--------------------------------------------------------------------------
+  | Model akan memeriksa:
+  |
+  | - akses toko;
+  | - status toko;
+  | - akun owner;
+  | - langganan aktif;
+  | - batas produk;
+  | - kategori;
+  | - diskon;
+  | - kode produk;
+  | - barcode.
+  |--------------------------------------------------------------------------
+  */
   return await productModel.create({
+    actor_id: currentUser.id_user,
+    actor_role: currentUser.role,
+    actor_store_id:
+      currentUser.id_store || null,
+
     id_store: finalStoreId,
-    id_category: id_category || null,
-    id_discount: id_discount || null,
-    kode_produk,
-    barcode: barcode || null,
-    nama_produk,
-    deskripsi: deskripsi || null,
-    harga_beli,
-    harga_jual,
-    stok,
-    stok_minimum,
-    satuan: satuan || "pcs",
-    foto: foto || null,
-    status_produk: status_produk || "aktif"
+    id_category:
+      product.id_category || null,
+    id_discount:
+      product.id_discount || null,
+
+    kode_produk:
+      product.kode_produk,
+
+    barcode:
+      product.barcode || null,
+
+    nama_produk:
+      product.nama_produk,
+
+    deskripsi:
+      product.deskripsi || null,
+
+    harga_beli:
+      product.harga_beli,
+
+    harga_jual:
+      product.harga_jual,
+
+    stok:
+      product.stok,
+
+    stok_minimum:
+      product.stok_minimum,
+
+    satuan:
+      product.satuan || "pcs",
+
+    foto:
+      product.foto || null,
+
+    status_produk:
+      product.status_produk || "aktif"
   })
 }
 
@@ -344,203 +689,349 @@ const createProduct = async (data = {}, currentUser) => {
 |--------------------------------------------------------------------------
 | UPDATE PRODUCT
 |--------------------------------------------------------------------------
+| Update tidak menambah jumlah produk sehingga tidak perlu memeriksa
+| batas_produk.
+|--------------------------------------------------------------------------
 */
-const updateProduct = async (id_product, data = {}, currentUser) => {
-  if (!currentUser) {
-    throw new Error("User tidak valid")
-  }
+const updateProduct = async (
+  id_product,
+  data = {},
+  currentUser
+) => {
+  validateCurrentUser(currentUser)
 
   if (!id_product) {
-    throw new Error("ID produk wajib diisi")
+    throw createServiceError(
+      "ID produk wajib diisi",
+      422,
+      "PRODUCT_ID_REQUIRED"
+    )
   }
 
-  if (!["owner", "admin"].includes(currentUser.role)) {
-    throw new Error("Hanya owner atau admin yang dapat memperbarui produk")
+  if (
+    !["owner", "admin"].includes(
+      currentUser.role
+    )
+  ) {
+    throw createServiceError(
+      "Hanya owner atau admin yang dapat memperbarui produk",
+      403,
+      "FORBIDDEN"
+    )
   }
 
-  const product = await productModel.findById(id_product)
+  const existingProduct =
+    await productModel.findById(id_product)
 
-  if (!product) {
-    throw new Error("Produk tidak ditemukan")
+  if (!existingProduct) {
+    throw createServiceError(
+      "Produk tidak ditemukan",
+      404,
+      "PRODUCT_NOT_FOUND"
+    )
   }
 
-  const {
-    id_store,
-    id_category,
-    id_discount,
-    kode_produk,
-    barcode,
-    nama_produk,
-    deskripsi,
-    harga_beli,
-    harga_jual,
-    stok,
-    stok_minimum,
-    satuan,
-    foto,
-    status_produk
-  } = normalizeProductData(data)
+  const product =
+    normalizeProductData(data)
 
-  if (!kode_produk || !nama_produk || !status_produk) {
-    throw new Error("Kode produk, nama produk, dan status produk wajib diisi")
-  }
+  validateProductFields(product)
 
-  if (!["aktif", "nonaktif"].includes(status_produk)) {
-    throw new Error("Status produk hanya boleh aktif atau nonaktif")
-  }
-
-  validateNumberMinZero(harga_beli, "Harga beli")
-  validateNumberMinZero(harga_jual, "Harga jual")
-  validateNumberMinZero(stok, "Stok")
-  validateNumberMinZero(stok_minimum, "Stok minimum")
-
-  let finalStoreId = id_store || product.id_store
+  let finalStoreId =
+    product.id_store ||
+    existingProduct.id_store
 
   if (currentUser.role === "owner") {
-    if (!id_store) {
-      throw new Error("ID toko wajib diisi")
+    if (
+      Number(existingProduct.id_owner) !==
+      Number(currentUser.id_user)
+    ) {
+      throw createServiceError(
+        "Anda tidak memiliki akses ke produk ini",
+        403,
+        "PRODUCT_ACCESS_DENIED"
+      )
     }
 
-    if (Number(product.id_owner) !== Number(currentUser.id_user)) {
-      throw new Error("Anda tidak memiliki akses ke produk ini")
+    if (!product.id_store) {
+      throw createServiceError(
+        "ID toko wajib diisi",
+        422,
+        "STORE_ID_REQUIRED"
+      )
     }
 
-    const store = await productModel.findStoreByIdAndOwner(
-      id_store,
-      currentUser.id_user
-    )
+    const store =
+      await productModel.findStoreByIdAndOwner(
+        product.id_store,
+        currentUser.id_user
+      )
 
     if (!store) {
-      throw new Error("Toko tidak ditemukan atau bukan milik owner ini")
+      throw createServiceError(
+        "Toko tidak ditemukan atau bukan milik owner ini",
+        404,
+        "STORE_NOT_FOUND"
+      )
     }
 
     if (store.status_toko !== "aktif") {
-      throw new Error("Toko sedang nonaktif")
+      throw createServiceError(
+        "Toko sedang nonaktif",
+        403,
+        "STORE_INACTIVE"
+      )
     }
+
+    finalStoreId = product.id_store
   }
 
   if (currentUser.role === "admin") {
-    if (Number(product.id_store) !== Number(currentUser.id_store)) {
-      throw new Error("Anda tidak memiliki akses ke produk ini")
+    if (!currentUser.id_store) {
+      throw createServiceError(
+        "Admin belum terhubung dengan toko",
+        403,
+        "ADMIN_STORE_NOT_ASSIGNED"
+      )
     }
 
-    finalStoreId = currentUser.id_store
+    if (
+      Number(existingProduct.id_store) !==
+      Number(currentUser.id_store)
+    ) {
+      throw createServiceError(
+        "Anda tidak memiliki akses ke produk ini",
+        403,
+        "PRODUCT_ACCESS_DENIED"
+      )
+    }
+
+    finalStoreId =
+      Number(currentUser.id_store)
   }
 
-  if (id_category) {
-    const category = await productModel.findCategoryByIdAndStore(
-      id_category,
-      finalStoreId
-    )
+  if (product.id_category) {
+    const category =
+      await productModel.findCategoryByIdAndStore(
+        product.id_category,
+        finalStoreId
+      )
 
     if (!category) {
-      throw new Error("Kategori tidak ditemukan pada toko ini")
+      throw createServiceError(
+        "Kategori tidak ditemukan pada toko ini",
+        404,
+        "CATEGORY_NOT_FOUND"
+      )
     }
 
-    if (category.status_kategori !== "aktif") {
-      throw new Error("Kategori sedang nonaktif")
+    if (
+      category.status_kategori !== "aktif"
+    ) {
+      throw createServiceError(
+        "Kategori sedang nonaktif",
+        403,
+        "CATEGORY_INACTIVE"
+      )
     }
   }
 
-  await validateDiscount(id_discount, finalStoreId)
-
-  const kodeExists = await productModel.findByKodeAndStore(
-    kode_produk,
+  await validateDiscount(
+    product.id_discount,
     finalStoreId
   )
 
-  if (
-    kodeExists &&
-    Number(kodeExists.id_product) !== Number(id_product)
-  ) {
-    throw new Error("Kode produk sudah digunakan pada toko ini")
-  }
-
-  if (barcode) {
-    const barcodeExists = await productModel.findByBarcodeAndStore(
-      barcode,
+  const codeExists =
+    await productModel.findByKodeAndStore(
+      product.kode_produk,
       finalStoreId
     )
 
+  if (
+    codeExists &&
+    Number(codeExists.id_product) !==
+      Number(id_product)
+  ) {
+    throw createServiceError(
+      "Kode produk sudah digunakan pada toko ini",
+      409,
+      "PRODUCT_CODE_ALREADY_EXISTS"
+    )
+  }
+
+  if (product.barcode) {
+    const barcodeExists =
+      await productModel.findByBarcodeAndStore(
+        product.barcode,
+        finalStoreId
+      )
+
     if (
       barcodeExists &&
-      Number(barcodeExists.id_product) !== Number(id_product)
+      Number(barcodeExists.id_product) !==
+        Number(id_product)
     ) {
-      throw new Error("Barcode sudah digunakan pada toko ini")
+      throw createServiceError(
+        "Barcode sudah digunakan pada toko ini",
+        409,
+        "PRODUCT_BARCODE_ALREADY_EXISTS"
+      )
     }
   }
 
-  const updated = await productModel.update(id_product, {
-    id_store: finalStoreId,
-    id_category: id_category || null,
-    id_discount: id_discount || null,
-    kode_produk,
-    barcode: barcode || null,
-    nama_produk,
-    deskripsi: deskripsi || null,
-    harga_beli,
-    harga_jual,
-    stok,
-    stok_minimum,
-    satuan: satuan || "pcs",
-    foto: foto || product.foto || null,
-    status_produk
-  })
+  const updated =
+    await productModel.update(
+      id_product,
+      {
+        id_store: finalStoreId,
+
+        id_category:
+          product.id_category || null,
+
+        id_discount:
+          product.id_discount || null,
+
+        kode_produk:
+          product.kode_produk,
+
+        barcode:
+          product.barcode || null,
+
+        nama_produk:
+          product.nama_produk,
+
+        deskripsi:
+          product.deskripsi || null,
+
+        harga_beli:
+          product.harga_beli,
+
+        harga_jual:
+          product.harga_jual,
+
+        stok:
+          product.stok,
+
+        stok_minimum:
+          product.stok_minimum,
+
+        satuan:
+          product.satuan || "pcs",
+
+        foto:
+          product.foto ||
+          existingProduct.foto ||
+          null,
+
+        status_produk:
+          product.status_produk
+      }
+    )
 
   if (!updated) {
-    throw new Error("Gagal memperbarui produk")
+    throw createServiceError(
+      "Gagal memperbarui produk",
+      500,
+      "PRODUCT_UPDATE_FAILED"
+    )
   }
 
-  return await productModel.findById(id_product)
+  return await productModel.findById(
+    id_product
+  )
 }
 
 /*
 |--------------------------------------------------------------------------
-| UPDATE PRODUCT FOTO
+| UPDATE PRODUCT PHOTO
 |--------------------------------------------------------------------------
 */
-const updateProductFoto = async (id_product, foto, currentUser) => {
-  if (!currentUser) {
-    throw new Error("User tidak valid")
-  }
+const updateProductFoto = async (
+  id_product,
+  foto,
+  currentUser
+) => {
+  validateCurrentUser(currentUser)
 
   if (!id_product) {
-    throw new Error("ID produk wajib diisi")
+    throw createServiceError(
+      "ID produk wajib diisi",
+      422,
+      "PRODUCT_ID_REQUIRED"
+    )
   }
 
   if (!foto) {
-    throw new Error("Foto produk wajib diisi")
+    throw createServiceError(
+      "Foto produk wajib diisi",
+      422,
+      "PRODUCT_PHOTO_REQUIRED"
+    )
   }
 
-  if (!["owner", "admin"].includes(currentUser.role)) {
-    throw new Error("Hanya owner atau admin yang dapat memperbarui foto produk")
+  if (
+    !["owner", "admin"].includes(
+      currentUser.role
+    )
+  ) {
+    throw createServiceError(
+      "Hanya owner atau admin yang dapat memperbarui foto produk",
+      403,
+      "FORBIDDEN"
+    )
   }
 
-  const product = await productModel.findById(id_product)
+  const product =
+    await productModel.findById(id_product)
 
   if (!product) {
-    throw new Error("Produk tidak ditemukan")
+    throw createServiceError(
+      "Produk tidak ditemukan",
+      404,
+      "PRODUCT_NOT_FOUND"
+    )
   }
 
-  if (currentUser.role === "owner") {
-    if (Number(product.id_owner) !== Number(currentUser.id_user)) {
-      throw new Error("Anda tidak memiliki akses ke produk ini")
-    }
+  if (
+    currentUser.role === "owner" &&
+    Number(product.id_owner) !==
+      Number(currentUser.id_user)
+  ) {
+    throw createServiceError(
+      "Anda tidak memiliki akses ke produk ini",
+      403,
+      "PRODUCT_ACCESS_DENIED"
+    )
   }
 
-  if (currentUser.role === "admin") {
-    if (Number(product.id_store) !== Number(currentUser.id_store)) {
-      throw new Error("Anda tidak memiliki akses ke produk ini")
-    }
+  if (
+    currentUser.role === "admin" &&
+    Number(product.id_store) !==
+      Number(currentUser.id_store)
+  ) {
+    throw createServiceError(
+      "Anda tidak memiliki akses ke produk ini",
+      403,
+      "PRODUCT_ACCESS_DENIED"
+    )
   }
 
-  const updated = await productModel.updateFoto(id_product, foto)
+  const updated =
+    await productModel.updateFoto(
+      id_product,
+      foto
+    )
 
   if (!updated) {
-    throw new Error("Gagal memperbarui foto produk")
+    throw createServiceError(
+      "Gagal memperbarui foto produk",
+      500,
+      "PRODUCT_PHOTO_UPDATE_FAILED"
+    )
   }
 
-  return await productModel.findById(id_product)
+  return await productModel.findById(
+    id_product
+  )
 }
 
 /*
@@ -548,41 +1039,76 @@ const updateProductFoto = async (id_product, foto, currentUser) => {
 | DELETE PRODUCT
 |--------------------------------------------------------------------------
 */
-const deleteProduct = async (id_product, currentUser) => {
-  if (!currentUser) {
-    throw new Error("User tidak valid")
-  }
+const deleteProduct = async (
+  id_product,
+  currentUser
+) => {
+  validateCurrentUser(currentUser)
 
   if (!id_product) {
-    throw new Error("ID produk wajib diisi")
+    throw createServiceError(
+      "ID produk wajib diisi",
+      422,
+      "PRODUCT_ID_REQUIRED"
+    )
   }
 
-  if (!["owner", "admin"].includes(currentUser.role)) {
-    throw new Error("Hanya owner atau admin yang dapat menghapus produk")
+  if (
+    !["owner", "admin"].includes(
+      currentUser.role
+    )
+  ) {
+    throw createServiceError(
+      "Hanya owner atau admin yang dapat menghapus produk",
+      403,
+      "FORBIDDEN"
+    )
   }
 
-  const product = await productModel.findById(id_product)
+  const product =
+    await productModel.findById(id_product)
 
   if (!product) {
-    throw new Error("Produk tidak ditemukan")
+    throw createServiceError(
+      "Produk tidak ditemukan",
+      404,
+      "PRODUCT_NOT_FOUND"
+    )
   }
 
-  if (currentUser.role === "owner") {
-    if (Number(product.id_owner) !== Number(currentUser.id_user)) {
-      throw new Error("Anda tidak memiliki akses ke produk ini")
-    }
+  if (
+    currentUser.role === "owner" &&
+    Number(product.id_owner) !==
+      Number(currentUser.id_user)
+  ) {
+    throw createServiceError(
+      "Anda tidak memiliki akses ke produk ini",
+      403,
+      "PRODUCT_ACCESS_DENIED"
+    )
   }
 
-  if (currentUser.role === "admin") {
-    if (Number(product.id_store) !== Number(currentUser.id_store)) {
-      throw new Error("Anda tidak memiliki akses ke produk ini")
-    }
+  if (
+    currentUser.role === "admin" &&
+    Number(product.id_store) !==
+      Number(currentUser.id_store)
+  ) {
+    throw createServiceError(
+      "Anda tidak memiliki akses ke produk ini",
+      403,
+      "PRODUCT_ACCESS_DENIED"
+    )
   }
 
-  const deleted = await productModel.remove(id_product)
+  const deleted =
+    await productModel.remove(id_product)
 
   if (!deleted) {
-    throw new Error("Gagal menghapus produk")
+    throw createServiceError(
+      "Gagal menghapus produk",
+      500,
+      "PRODUCT_DELETE_FAILED"
+    )
   }
 
   return {
@@ -594,6 +1120,7 @@ const deleteProduct = async (id_product, currentUser) => {
 module.exports = {
   getAllProducts,
   getProductById,
+  getMyProductUsage,
   createProduct,
   updateProduct,
   updateProductFoto,
