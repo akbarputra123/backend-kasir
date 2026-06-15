@@ -50,7 +50,7 @@ const normalizeEmail = (email) => {
 
 /*
 |--------------------------------------------------------------------------
-| VALIDATE EMAIL
+| VALIDATE EMAIL FORMAT
 |--------------------------------------------------------------------------
 */
 const validateEmail = (email) => {
@@ -61,9 +61,44 @@ const validateEmail = (email) => {
 
 /*
 |--------------------------------------------------------------------------
+| GET PUBLIC API URL
+|--------------------------------------------------------------------------
+| APP_URL wajib berupa URL backend publik.
+|
+| Contoh:
+| APP_URL=http://76.13.197.9:2000/api
+|--------------------------------------------------------------------------
+*/
+const getPublicApiUrl = () => {
+  const appUrl = String(
+    process.env.APP_URL || ""
+  )
+    .trim()
+    .replace(/\/+$/, "")
+
+  if (!appUrl) {
+    throw new Error(
+      "APP_URL belum dikonfigurasi pada file .env"
+    )
+  }
+
+  if (
+    !appUrl.startsWith("http://") &&
+    !appUrl.startsWith("https://")
+  ) {
+    throw new Error(
+      "APP_URL harus diawali http:// atau https://"
+    )
+  }
+
+  return appUrl
+}
+
+/*
+|--------------------------------------------------------------------------
 | VALIDATE MAIL RESULT
 |--------------------------------------------------------------------------
-| Memastikan server SMTP menerima alamat email tujuan.
+| Memastikan alamat penerima diterima oleh server SMTP.
 |--------------------------------------------------------------------------
 */
 const validateMailResult = ({
@@ -86,16 +121,22 @@ const validateMailResult = ({
   const normalizedRecipient =
     normalizeEmail(recipient)
 
-  const recipientAccepted = accepted.includes(
-    normalizedRecipient
-  )
+  const recipientAccepted =
+    accepted.includes(normalizedRecipient)
+
+  const recipientRejected =
+    rejected.includes(normalizedRecipient)
 
   console.log("")
   console.log("==============================================")
   console.log(`📧 HASIL PENGIRIMAN ${mailType}`)
   console.log("==============================================")
-  console.log(`Message ID : ${result.messageId || "-"}`)
-  console.log(`Tujuan     : ${normalizedRecipient}`)
+  console.log(
+    `Message ID : ${result.messageId || "-"}`
+  )
+  console.log(
+    `Tujuan     : ${normalizedRecipient}`
+  )
   console.log(
     `Accepted   : ${
       accepted.length > 0
@@ -110,7 +151,9 @@ const validateMailResult = ({
         : "-"
     }`
   )
-  console.log(`Response   : ${result.response || "-"}`)
+  console.log(
+    `Response   : ${result.response || "-"}`
+  )
   console.log(
     "Envelope   :",
     result.envelope || "-"
@@ -118,27 +161,31 @@ const validateMailResult = ({
   console.log("==============================================")
   console.log("")
 
-  if (!recipientAccepted) {
-    throw new Error(
-      `Server SMTP tidak menerima email tujuan ${normalizedRecipient}`
-    )
-  }
-
-  if (rejected.includes(normalizedRecipient)) {
+  if (recipientRejected) {
     throw new Error(
       `Email tujuan ditolak oleh server SMTP: ${normalizedRecipient}`
     )
   }
 
+  if (!recipientAccepted) {
+    throw new Error(
+      `Server SMTP tidak menerima email tujuan: ${normalizedRecipient}`
+    )
+  }
+
   return {
     accepted,
-    rejected
+    rejected,
+    response: result.response || null,
+    message_id: result.messageId || null
   }
 }
 
 /*
 |--------------------------------------------------------------------------
 | SEND VERIFICATION EMAIL
+|--------------------------------------------------------------------------
+| Mengirim tautan aktivasi akun.
 |--------------------------------------------------------------------------
 */
 const sendVerificationEmail = async ({
@@ -147,6 +194,7 @@ const sendVerificationEmail = async ({
   token
 }) => {
   const recipient = normalizeEmail(email)
+
   const name = String(
     nama_lengkap || "Pengguna SIOPOS"
   ).trim()
@@ -171,10 +219,7 @@ const sendVerificationEmail = async ({
     )
   }
 
-  const appUrl = String(
-    process.env.APP_URL ||
-    "http://localhost:2000/api"
-  ).replace(/\/+$/, "")
+  const appUrl = getPublicApiUrl()
 
   const verificationUrl =
     `${appUrl}/auth/verify-email` +
@@ -205,9 +250,15 @@ const sendVerificationEmail = async ({
       process.env.MAIL_USER,
 
     subject: template.subject,
+
     text:
       template.text ||
-      `Aktifkan akun SIOPOS melalui tautan berikut: ${verificationUrl}`,
+      (
+        `Halo ${name},\n\n` +
+        `Aktifkan akun SIOPOS melalui tautan berikut:\n` +
+        `${verificationUrl}`
+      ),
+
     html: template.html,
 
     headers: {
@@ -225,31 +276,38 @@ const sendVerificationEmail = async ({
 
   return {
     success: true,
-    message_id: result.messageId || null,
     email: recipient,
+    message_id: mailResult.message_id,
     accepted: mailResult.accepted,
     rejected: mailResult.rejected,
-    response: result.response || null,
-    verification_url: verificationUrl
+    response: mailResult.response
   }
 }
 
 /*
 |--------------------------------------------------------------------------
-| SEND RESET PASSWORD EMAIL
+| SEND RESET PASSWORD OTP
+|--------------------------------------------------------------------------
+| Mengirim kode OTP 6 digit untuk reset password.
+|
+| Parameter yang diterima:
+| - email
+| - nama_lengkap
+| - otp
 |--------------------------------------------------------------------------
 */
 const sendResetPasswordEmail = async ({
   email,
   nama_lengkap,
-  token
+  otp
 }) => {
   const recipient = normalizeEmail(email)
+
   const name = String(
     nama_lengkap || "Pengguna SIOPOS"
   ).trim()
 
-  const rawToken = String(token || "").trim()
+  const otpValue = String(otp || "").trim()
 
   if (!recipient) {
     throw new Error(
@@ -263,25 +321,22 @@ const sendResetPasswordEmail = async ({
     )
   }
 
-  if (!rawToken) {
+  if (!otpValue) {
     throw new Error(
-      "Token reset password tidak ditemukan"
+      "Kode OTP reset password tidak ditemukan"
     )
   }
 
-  const frontendUrl = String(
-    process.env.FRONTEND_URL ||
-    "http://localhost:5173"
-  ).replace(/\/+$/, "")
-
-  const resetUrl =
-    `${frontendUrl}/reset-password` +
-    `?token=${encodeURIComponent(rawToken)}`
+  if (!/^\d{6}$/.test(otpValue)) {
+    throw new Error(
+      "Kode OTP reset password harus terdiri dari 6 digit"
+    )
+  }
 
   const template =
     getResetPasswordEmailTemplate({
       nama_lengkap: name,
-      resetUrl
+      otp: otpValue
     })
 
   if (
@@ -290,7 +345,7 @@ const sendResetPasswordEmail = async ({
     !template.html
   ) {
     throw new Error(
-      "Template email reset password tidak valid"
+      "Template email OTP reset password tidak valid"
     )
   }
 
@@ -303,9 +358,17 @@ const sendResetPasswordEmail = async ({
       process.env.MAIL_USER,
 
     subject: template.subject,
+
     text:
       template.text ||
-      `Reset password SIOPOS melalui tautan berikut: ${resetUrl}`,
+      (
+        `Halo ${name},\n\n` +
+        `Kode OTP reset password SIOPOS Anda adalah:\n\n` +
+        `${otpValue}\n\n` +
+        `Kode berlaku selama 10 menit.\n` +
+        `Jangan berikan kode OTP kepada siapa pun.`
+      ),
+
     html: template.html,
 
     headers: {
@@ -318,17 +381,16 @@ const sendResetPasswordEmail = async ({
   const mailResult = validateMailResult({
     result,
     recipient,
-    mailType: "EMAIL RESET PASSWORD"
+    mailType: "OTP RESET PASSWORD"
   })
 
   return {
     success: true,
-    message_id: result.messageId || null,
     email: recipient,
+    message_id: mailResult.message_id,
     accepted: mailResult.accepted,
     rejected: mailResult.rejected,
-    response: result.response || null,
-    reset_url: resetUrl
+    response: mailResult.response
   }
 }
 

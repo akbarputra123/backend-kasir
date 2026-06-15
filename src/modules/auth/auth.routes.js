@@ -31,8 +31,8 @@ const router = express.Router()
  * @swagger
  * /auth/register-owner:
  *   post:
- *     summary: Register owner pertama
- *     description: Membuat akun owner pertama untuk aplikasi SIOPOS. Akun dibuat dalam status nonaktif dan email aktivasi akan dikirim ke alamat email yang didaftarkan.
+ *     summary: Registrasi akun owner
+ *     description: Membuat akun owner baru untuk aplikasi SIOPOS. SIOPOS mendukung banyak owner. Akun dibuat dengan status nonaktif dan akan aktif setelah email berhasil diverifikasi.
  *     tags:
  *       - Auth
  *     requestBody:
@@ -50,14 +50,15 @@ const router = express.Router()
  *             properties:
  *               nama_lengkap:
  *                 type: string
- *                 example: Owner SIOPOS
+ *                 example: Akbar Saputra
  *               username:
  *                 type: string
- *                 example: owner
+ *                 minLength: 3
+ *                 example: akbarsaputra
  *               email:
  *                 type: string
  *                 format: email
- *                 example: owner@siopos.com
+ *                 example: barltzyml@gmail.com
  *               no_hp:
  *                 type: string
  *                 nullable: true
@@ -66,15 +67,22 @@ const router = express.Router()
  *                 type: string
  *                 format: password
  *                 minLength: 6
- *                 example: "123456"
+ *                 example: "password123"
  *               konfirmasi_password:
  *                 type: string
  *                 format: password
  *                 minLength: 6
- *                 example: "123456"
+ *                 example: "password123"
+ *           example:
+ *             nama_lengkap: Akbar Saputra
+ *             username: akbarsaputra
+ *             email: barltzyml@gmail.com
+ *             no_hp: "081234567890"
+ *             password: "password123"
+ *             konfirmasi_password: "password123"
  *     responses:
  *       201:
- *         description: Registrasi owner berhasil dan email aktivasi telah diproses
+ *         description: Registrasi berhasil dan email aktivasi telah diproses
  *         content:
  *           application/json:
  *             schema:
@@ -91,27 +99,59 @@ const router = express.Router()
  *                   properties:
  *                     id_user:
  *                       type: integer
- *                       example: 1
+ *                       example: 7
+ *                     id_store:
+ *                       type: integer
+ *                       nullable: true
+ *                       example: null
  *                     nama_lengkap:
  *                       type: string
- *                       example: Owner SIOPOS
+ *                       example: Akbar Saputra
  *                     username:
  *                       type: string
- *                       example: owner
+ *                       example: akbarsaputra
  *                     email:
  *                       type: string
- *                       example: owner@siopos.com
+ *                       format: email
+ *                       example: barltzyml@gmail.com
+ *                     no_hp:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "081234567890"
  *                     role:
  *                       type: string
+ *                       enum:
+ *                         - owner
  *                       example: owner
  *                     status_akun:
  *                       type: string
+ *                       enum:
+ *                         - aktif
+ *                         - nonaktif
  *                       example: nonaktif
  *                     email_sent:
  *                       type: boolean
  *                       example: true
+ *                     pesan:
+ *                       type: string
+ *                       example: Registrasi berhasil. Silakan periksa email untuk mengaktifkan akun.
  *       400:
  *         description: Registrasi gagal atau data tidak valid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 sukses:
+ *                   type: boolean
+ *                   example: false
+ *                 pesan:
+ *                   type: string
+ *                   example: Email sudah digunakan
+ *                 error:
+ *                   type: string
+ *                   nullable: true
+ *                   example: Email sudah digunakan
  */
 router.post(
   "/register-owner",
@@ -123,7 +163,7 @@ router.post(
  * /auth/resend-verification:
  *   post:
  *     summary: Kirim ulang email aktivasi
- *     description: Mengirim ulang tautan aktivasi untuk akun yang belum melakukan verifikasi email. Respons dibuat umum untuk menjaga keamanan data user.
+ *     description: Mengirim ulang tautan aktivasi akun untuk user yang belum melakukan verifikasi email. Tautan aktivasi berlaku selama 24 jam.
  *     tags:
  *       - Auth
  *     requestBody:
@@ -138,12 +178,28 @@ router.post(
  *               email:
  *                 type: string
  *                 format: email
- *                 example: owner@siopos.com
+ *                 example: barltzyml@gmail.com
+ *           example:
+ *             email: barltzyml@gmail.com
  *     responses:
  *       200:
- *         description: Permintaan pengiriman email aktivasi berhasil diproses
+ *         description: Permintaan pengiriman ulang email aktivasi berhasil diproses
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 sukses:
+ *                   type: boolean
+ *                   example: true
+ *                 pesan:
+ *                   type: string
+ *                   example: Jika email terdaftar dan belum aktif, tautan aktivasi akan dikirim.
+ *                 data:
+ *                   nullable: true
+ *                   example: null
  *       400:
- *         description: Email tidak valid atau pengiriman gagal
+ *         description: Format email tidak valid atau pengiriman email gagal
  */
 router.post(
   "/resend-verification",
@@ -155,22 +211,32 @@ router.post(
  * /auth/verify-email:
  *   get:
  *     summary: Verifikasi dan aktifkan akun
- *     description: Memverifikasi token aktivasi dari email. Setelah berhasil, email_verified_at akan diisi dan status akun berubah menjadi aktif.
+ *     description: Memverifikasi token aktivasi dari email. Apabila berhasil, email_verified_at akan diisi dan status akun berubah menjadi aktif. Endpoint ini menampilkan halaman HTML berhasil atau gagal.
  *     tags:
  *       - Auth
  *     parameters:
  *       - in: query
  *         name: token
  *         required: true
+ *         description: Token aktivasi yang diperoleh melalui email
  *         schema:
  *           type: string
- *         description: Token aktivasi yang diterima melalui email
  *         example: 8e3a37ad18d54f8ab969e355ba019092a8ea3b7f935227a2fa00ec59bf41d1b0
  *     responses:
  *       200:
- *         description: Email berhasil diverifikasi dan akun telah aktif
+ *         description: Aktivasi akun berhasil
+ *         content:
+ *           text/html:
+ *             schema:
+ *               type: string
+ *               example: Halaman Aktivasi Berhasil
  *       400:
  *         description: Token tidak valid, sudah digunakan, atau kedaluwarsa
+ *         content:
+ *           text/html:
+ *             schema:
+ *               type: string
+ *               example: Halaman Aktivasi Gagal
  */
 router.get(
   "/verify-email",
@@ -182,7 +248,7 @@ router.get(
  * /auth/login:
  *   post:
  *     summary: Login user
- *     description: Login untuk owner, admin, atau kasir menggunakan username atau email dan password. User hanya dapat login setelah email diverifikasi dan akun berstatus aktif.
+ *     description: Login owner, admin, atau kasir menggunakan username atau email dan password. User hanya dapat login setelah email diverifikasi dan akun berstatus aktif.
  *     tags:
  *       - Auth
  *     requestBody:
@@ -198,29 +264,46 @@ router.get(
  *               usernameOrEmail:
  *                 type: string
  *                 description: Username atau email user
- *                 example: owner
+ *                 example: akbarsaputra
  *               password:
  *                 type: string
  *                 format: password
- *                 example: "123456"
+ *                 example: "password123"
  *           examples:
  *             loginDenganUsername:
  *               summary: Login menggunakan username
  *               value:
- *                 usernameOrEmail: owner
- *                 password: "123456"
+ *                 usernameOrEmail: akbarsaputra
+ *                 password: "password123"
  *             loginDenganEmail:
  *               summary: Login menggunakan email
  *               value:
- *                 usernameOrEmail: owner@siopos.com
- *                 password: "123456"
+ *                 usernameOrEmail: barltzyml@gmail.com
+ *                 password: "password123"
  *     responses:
  *       200:
  *         description: Login berhasil
- *       400:
- *         description: Username/email dan password wajib diisi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 sukses:
+ *                   type: boolean
+ *                   example: true
+ *                 pesan:
+ *                   type: string
+ *                   example: Login berhasil
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     token:
+ *                       type: string
+ *                       example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
+ *                     user:
+ *                       type: object
  *       401:
- *         description: Login gagal, email belum diverifikasi, atau akun nonaktif
+ *         description: Username/email atau password salah, email belum diverifikasi, akun nonaktif, atau toko nonaktif
  */
 router.post(
   "/login",
@@ -231,8 +314,8 @@ router.post(
  * @swagger
  * /auth/forgot-password:
  *   post:
- *     summary: Kirim email reset password
- *     description: Mengirimkan tautan reset password ke alamat email yang terdaftar. Token reset berlaku selama 30 menit. Respons dibuat umum untuk menjaga keamanan data user.
+ *     summary: Kirim OTP reset password
+ *     description: Mengirim kode OTP 6 digit ke alamat email yang terdaftar. OTP berlaku selama 10 menit dan hanya dapat digunakan satu kali.
  *     tags:
  *       - Auth
  *     requestBody:
@@ -247,12 +330,28 @@ router.post(
  *               email:
  *                 type: string
  *                 format: email
- *                 example: owner@siopos.com
+ *                 example: barltzyml@gmail.com
+ *           example:
+ *             email: barltzyml@gmail.com
  *     responses:
  *       200:
- *         description: Permintaan reset password berhasil diproses
+ *         description: Permintaan OTP reset password berhasil diproses
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 sukses:
+ *                   type: boolean
+ *                   example: true
+ *                 pesan:
+ *                   type: string
+ *                   example: Jika email terdaftar, kode OTP reset password akan dikirim ke email.
+ *                 data:
+ *                   nullable: true
+ *                   example: null
  *       400:
- *         description: Format email tidak valid atau pengiriman email gagal
+ *         description: Format email tidak valid atau pengiriman OTP gagal
  */
 router.post(
   "/forgot-password",
@@ -263,8 +362,8 @@ router.post(
  * @swagger
  * /auth/reset-password:
  *   post:
- *     summary: Reset password menggunakan token
- *     description: Mengubah password user menggunakan token reset yang diterima melalui email. Token hanya dapat digunakan satu kali dan berlaku selama 30 menit.
+ *     summary: Reset password menggunakan OTP
+ *     description: Mengubah password user menggunakan email dan OTP 6 digit yang diterima melalui email. OTP hanya dapat digunakan satu kali dan berlaku selama 10 menit.
  *     tags:
  *       - Auth
  *     requestBody:
@@ -274,29 +373,73 @@ router.post(
  *           schema:
  *             type: object
  *             required:
- *               - token
+ *               - email
+ *               - otp
  *               - password_baru
  *               - konfirmasi_password
  *             properties:
- *               token:
+ *               email:
  *                 type: string
- *                 description: Token reset password dari tautan email
- *                 example: 9a49c414697bda884f4168a69100103b92970e8676b37ff67f28a584ea1fd911
+ *                 format: email
+ *                 description: Email akun yang meminta reset password
+ *                 example: barltzyml@gmail.com
+ *               otp:
+ *                 type: string
+ *                 minLength: 6
+ *                 maxLength: 6
+ *                 pattern: "^\\d{6}$"
+ *                 description: Kode OTP 6 digit dari email
+ *                 example: "482915"
  *               password_baru:
  *                 type: string
  *                 format: password
  *                 minLength: 6
- *                 example: passwordBaru123
+ *                 description: Password baru minimal 6 karakter
+ *                 example: "passwordBaru123"
  *               konfirmasi_password:
  *                 type: string
  *                 format: password
  *                 minLength: 6
- *                 example: passwordBaru123
+ *                 description: Konfirmasi password baru
+ *                 example: "passwordBaru123"
+ *           example:
+ *             email: barltzyml@gmail.com
+ *             otp: "482915"
+ *             password_baru: "passwordBaru123"
+ *             konfirmasi_password: "passwordBaru123"
  *     responses:
  *       200:
  *         description: Password berhasil diubah
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 sukses:
+ *                   type: boolean
+ *                   example: true
+ *                 pesan:
+ *                   type: string
+ *                   example: Password berhasil diubah. Silakan login menggunakan password baru.
+ *                 data:
+ *                   nullable: true
+ *                   example: null
  *       400:
- *         description: Token tidak valid, kedaluwarsa, atau data password tidak sesuai
+ *         description: Email tidak valid, OTP salah, OTP kedaluwarsa, atau password tidak sesuai
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 sukses:
+ *                   type: boolean
+ *                   example: false
+ *                 pesan:
+ *                   type: string
+ *                   example: Kode OTP tidak valid, sudah digunakan, atau sudah kedaluwarsa
+ *                 error:
+ *                   type: string
+ *                   nullable: true
  */
 router.post(
   "/reset-password",
@@ -317,7 +460,7 @@ router.post(
  *       200:
  *         description: Profil berhasil diambil
  *       401:
- *         description: Token tidak valid atau tidak ditemukan
+ *         description: Token JWT tidak valid atau tidak ditemukan
  *       400:
  *         description: Gagal mengambil profil
  */
@@ -339,9 +482,22 @@ router.get(
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Token valid
+ *         description: Token JWT valid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 sukses:
+ *                   type: boolean
+ *                   example: true
+ *                 pesan:
+ *                   type: string
+ *                   example: Token valid
+ *                 data:
+ *                   type: object
  *       401:
- *         description: Token tidak valid, kedaluwarsa, atau tidak ditemukan
+ *         description: Token JWT tidak valid, kedaluwarsa, atau tidak ditemukan
  */
 router.get(
   "/check-token",

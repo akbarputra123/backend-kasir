@@ -38,6 +38,12 @@ CREATE TABLE users (
 );
 
 
+ALTER TABLE auth_tokens
+DROP INDEX unique_auth_token_hash;
+
+ALTER TABLE auth_tokens
+ADD INDEX index_auth_token_hash (token_hash);
+
 CREATE TABLE auth_tokens ( id_token BIGINT AUTO_INCREMENT PRIMARY KEY,
  id_user INT NOT NULL, 
  token_hash VARCHAR(64) NOT NULL,

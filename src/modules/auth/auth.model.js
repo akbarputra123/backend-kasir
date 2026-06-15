@@ -7,12 +7,20 @@ const pool = require("../../config/database")
 |--------------------------------------------------------------------------
 | Digunakan untuk login menggunakan username atau email.
 |
-| Relasi users.id_store hanya digunakan oleh admin dan kasir.
-| Owner mengambil daftar toko melalui stores.id_owner.
+| Owner:
+| - users.id_store bernilai NULL
+| - toko owner diambil melalui stores.id_owner
+|
+| Admin dan kasir:
+| - users.id_store mengarah ke toko tempat mereka bekerja
 |--------------------------------------------------------------------------
 */
-const findUserByUsernameOrEmail = async (usernameOrEmail) => {
-  const value = String(usernameOrEmail || "").trim()
+const findUserByUsernameOrEmail = async (
+  usernameOrEmail
+) => {
+  const value = String(
+    usernameOrEmail || ""
+  ).trim()
 
   const [rows] = await pool.query(
     `
@@ -60,6 +68,8 @@ const findUserByUsernameOrEmail = async (usernameOrEmail) => {
 |--------------------------------------------------------------------------
 | FIND USER BY USERNAME
 |--------------------------------------------------------------------------
+| Digunakan untuk memeriksa username saat registrasi.
+|--------------------------------------------------------------------------
 */
 const findUserByUsername = async (username) => {
   const value = String(username || "").trim()
@@ -98,6 +108,11 @@ const findUserByUsername = async (username) => {
 /*
 |--------------------------------------------------------------------------
 | FIND USER BY EMAIL
+|--------------------------------------------------------------------------
+| Digunakan untuk:
+| - Validasi registrasi
+| - Kirim ulang aktivasi
+| - Lupa password
 |--------------------------------------------------------------------------
 */
 const findUserByEmail = async (email) => {
@@ -150,12 +165,7 @@ const findUserByEmail = async (email) => {
 |--------------------------------------------------------------------------
 | FIND USER BY ID
 |--------------------------------------------------------------------------
-| Untuk owner:
-| - id_store bernilai NULL
-| - total_toko dihitung dari stores.id_owner
-|
-| Untuk admin/kasir:
-| - id_store mengarah ke toko tempat mereka bekerja
+| Mengambil profil user berdasarkan ID pada JWT.
 |--------------------------------------------------------------------------
 */
 const findUserById = async (id_user) => {
@@ -213,10 +223,10 @@ const findUserById = async (id_user) => {
 |--------------------------------------------------------------------------
 | CREATE OWNER
 |--------------------------------------------------------------------------
-| Setiap owner boleh mendaftar.
+| Membuat owner baru dengan status nonaktif.
 |
 | Owner tidak menggunakan users.id_store karena satu owner dapat memiliki
-| beberapa toko. Relasi owner dan toko disimpan di stores.id_owner.
+| beberapa toko melalui stores.id_owner.
 |--------------------------------------------------------------------------
 */
 const createOwner = async (data) => {
@@ -276,7 +286,12 @@ const createOwner = async (data) => {
 |--------------------------------------------------------------------------
 | CREATE AUTH TOKEN
 |--------------------------------------------------------------------------
-| Menonaktifkan token lama dengan tipe yang sama, kemudian membuat token baru.
+| Digunakan untuk:
+| - verifikasi_email
+| - reset_password
+|
+| Token lama dengan tipe yang sama akan dinonaktifkan sebelum token baru
+| dibuat.
 |--------------------------------------------------------------------------
 */
 const createAuthToken = async ({
@@ -341,6 +356,8 @@ const createAuthToken = async ({
 |--------------------------------------------------------------------------
 | FIND VALID AUTH TOKEN
 |--------------------------------------------------------------------------
+| Digunakan untuk token aktivasi akun.
+|--------------------------------------------------------------------------
 */
 const findValidAuthToken = async (
   token_hash,
@@ -373,6 +390,7 @@ const findValidAuthToken = async (
       AND at.used_at IS NULL
       AND at.expires_at > NOW()
 
+    ORDER BY at.id_token DESC
     LIMIT 1
     `,
     [token_hash, tipe_token]
@@ -383,10 +401,77 @@ const findValidAuthToken = async (
 
 /*
 |--------------------------------------------------------------------------
-| UPDATE VERIFICATION EMAIL SENT AT
+| FIND VALID RESET OTP
+|--------------------------------------------------------------------------
+| Digunakan untuk reset password menggunakan OTP 6 digit.
+|
+| OTP wajib cocok dengan:
+| - email user
+| - hash OTP
+| - tipe token reset_password
+| - belum pernah digunakan
+| - belum kedaluwarsa
 |--------------------------------------------------------------------------
 */
-const updateVerificationEmailSentAt = async (id_user) => {
+const findValidResetOtp = async ({
+  email,
+  otp_hash
+}) => {
+  const normalizedEmail = String(email || "")
+    .trim()
+    .toLowerCase()
+
+  const [rows] = await pool.query(
+    `
+    SELECT
+      at.id_token,
+      at.id_user,
+      at.token_hash,
+      at.tipe_token,
+      at.expires_at,
+      at.used_at,
+      at.created_at,
+
+      u.nama_lengkap,
+      u.username,
+      u.email,
+      u.password,
+      u.role,
+      u.status_akun
+
+    FROM auth_tokens at
+
+    INNER JOIN users u
+      ON u.id_user = at.id_user
+
+    WHERE u.email = ?
+      AND at.token_hash = ?
+      AND at.tipe_token = 'reset_password'
+      AND at.used_at IS NULL
+      AND at.expires_at > NOW()
+
+    ORDER BY at.id_token DESC
+    LIMIT 1
+    `,
+    [
+      normalizedEmail,
+      otp_hash
+    ]
+  )
+
+  return rows[0] || null
+}
+
+/*
+|--------------------------------------------------------------------------
+| UPDATE VERIFICATION EMAIL SENT AT
+|--------------------------------------------------------------------------
+| Menyimpan waktu terakhir email aktivasi dikirim.
+|--------------------------------------------------------------------------
+*/
+const updateVerificationEmailSentAt = async (
+  id_user
+) => {
   const [result] = await pool.query(
     `
     UPDATE users
@@ -405,7 +490,8 @@ const updateVerificationEmailSentAt = async (id_user) => {
 |--------------------------------------------------------------------------
 | VERIFY EMAIL AND USE TOKEN
 |--------------------------------------------------------------------------
-| Mengaktifkan akun dan menggunakan token dalam satu transaksi.
+| Mengaktifkan akun dan menandai token verifikasi sebagai sudah digunakan
+| dalam satu transaksi.
 |--------------------------------------------------------------------------
 */
 const verifyEmailWithToken = async ({
@@ -422,6 +508,7 @@ const verifyEmailWithToken = async ({
       SELECT
         id_token,
         id_user,
+        tipe_token,
         used_at,
         expires_at
 
@@ -461,7 +548,9 @@ const verifyEmailWithToken = async ({
     )
 
     if (userResult.affectedRows === 0) {
-      throw new Error("Gagal mengaktifkan akun")
+      throw new Error(
+        "Gagal mengaktifkan akun"
+      )
     }
 
     await connection.query(
@@ -488,7 +577,9 @@ const verifyEmailWithToken = async ({
 
 /*
 |--------------------------------------------------------------------------
-| RESET PASSWORD AND USE TOKEN
+| RESET PASSWORD WITH OTP
+|--------------------------------------------------------------------------
+| Mengubah password dan menandai OTP sudah digunakan dalam satu transaksi.
 |--------------------------------------------------------------------------
 */
 const resetPasswordWithToken = async ({
@@ -506,6 +597,7 @@ const resetPasswordWithToken = async ({
       SELECT
         id_token,
         id_user,
+        tipe_token,
         used_at,
         expires_at
 
@@ -525,25 +617,36 @@ const resetPasswordWithToken = async ({
 
     if (!tokenRows[0]) {
       throw new Error(
-        "Token reset password tidak valid, sudah digunakan, atau sudah kedaluwarsa"
+        "Kode OTP tidak valid, sudah digunakan, atau sudah kedaluwarsa"
       )
     }
 
-    const [passwordResult] = await connection.query(
-      `
-      UPDATE users
-      SET
-        password = ?,
-        updated_at = NOW()
-      WHERE id_user = ?
-      `,
-      [hashed_password, id_user]
-    )
+    const [passwordResult] =
+      await connection.query(
+        `
+        UPDATE users
+        SET
+          password = ?,
+          updated_at = NOW()
+        WHERE id_user = ?
+        `,
+        [
+          hashed_password,
+          id_user
+        ]
+      )
 
     if (passwordResult.affectedRows === 0) {
-      throw new Error("Gagal memperbarui password")
+      throw new Error(
+        "Gagal memperbarui password"
+      )
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | NONAKTIFKAN SEMUA OTP RESET PASSWORD USER
+    |--------------------------------------------------------------------------
+    */
     await connection.query(
       `
       UPDATE auth_tokens
@@ -590,7 +693,8 @@ const updateLastLogin = async (id_user) => {
 |--------------------------------------------------------------------------
 | COUNT OWNER
 |--------------------------------------------------------------------------
-| Hanya untuk statistik, bukan untuk membatasi registrasi owner.
+| Hanya digunakan untuk statistik.
+| Tidak digunakan untuk membatasi registrasi owner.
 |--------------------------------------------------------------------------
 */
 const countOwner = async () => {
@@ -609,6 +713,8 @@ const countOwner = async () => {
 |--------------------------------------------------------------------------
 | DELETE EXPIRED AUTH TOKENS
 |--------------------------------------------------------------------------
+| Menghapus token kedaluwarsa dan token yang sudah lama digunakan.
+|--------------------------------------------------------------------------
 */
 const deleteExpiredAuthTokens = async () => {
   const [result] = await pool.query(
@@ -617,7 +723,10 @@ const deleteExpiredAuthTokens = async () => {
     WHERE expires_at < NOW()
        OR (
          used_at IS NOT NULL
-         AND used_at < DATE_SUB(NOW(), INTERVAL 7 DAY)
+         AND used_at < DATE_SUB(
+           NOW(),
+           INTERVAL 7 DAY
+         )
        )
     `
   )
@@ -635,6 +744,7 @@ module.exports = {
 
   createAuthToken,
   findValidAuthToken,
+  findValidResetOtp,
 
   updateVerificationEmailSentAt,
   verifyEmailWithToken,
