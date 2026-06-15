@@ -1,3 +1,4 @@
+
 const express = require("express")
 const multer = require("multer")
 const path = require("path")
@@ -7,6 +8,7 @@ const {
   getAllStores,
   getMyStores,
   getStoreById,
+  getMyStoreUsage,
   createStore,
   updateStore,
   updateStoreLogo,
@@ -22,66 +24,132 @@ const router = express.Router()
 
 /*
 |--------------------------------------------------------------------------
-| UPLOAD CONFIG
-|--------------------------------------------------------------------------
-| Folder tujuan:
-| uploads/stores
+| UPLOAD DIRECTORY
 |--------------------------------------------------------------------------
 */
-const uploadDir = path.join(process.cwd(), "uploads", "stores")
+const uploadDir = path.join(
+  process.cwd(),
+  "uploads",
+  "stores"
+)
 
 if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true })
+  fs.mkdirSync(uploadDir, {
+    recursive: true
+  })
 }
 
+/*
+|--------------------------------------------------------------------------
+| MULTER STORAGE
+|--------------------------------------------------------------------------
+*/
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir)
+  destination: (
+    req,
+    file,
+    callback
+  ) => {
+    callback(null, uploadDir)
   },
 
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase()
+  filename: (
+    req,
+    file,
+    callback
+  ) => {
+    const extension = path
+      .extname(file.originalname)
+      .toLowerCase()
 
     const originalName = path
-      .basename(file.originalname, ext)
+      .basename(
+        file.originalname,
+        extension
+      )
       .toLowerCase()
       .trim()
       .replace(/\s+/g, "_")
       .replace(/[^a-z0-9_-]/g, "")
 
-    const safeName = originalName || "logo"
+    const safeName =
+      originalName || "logo"
 
-    const uniqueName = `${Date.now()}-${Math.round(
-      Math.random() * 1e9
-    )}-${safeName}${ext}`
+    const uniqueName =
+      `${Date.now()}-` +
+      `${Math.round(Math.random() * 1e9)}-` +
+      `${safeName}${extension}`
 
-    cb(null, uniqueName)
+    callback(null, uniqueName)
   }
 })
 
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = [
+/*
+|--------------------------------------------------------------------------
+| FILE FILTER
+|--------------------------------------------------------------------------
+*/
+const fileFilter = (
+  req,
+  file,
+  callback
+) => {
+  const allowedMimeTypes = [
     "image/jpeg",
-    "image/jpg",
     "image/png",
     "image/webp"
   ]
 
-  if (!allowedTypes.includes(file.mimetype)) {
-    return cb(
-      new Error("Format logo harus JPG, JPEG, PNG, atau WEBP"),
+  const allowedExtensions = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp"
+  ]
+
+  const extension = path
+    .extname(file.originalname)
+    .toLowerCase()
+
+  const mimeAllowed =
+    allowedMimeTypes.includes(
+      file.mimetype
+    )
+
+  const extensionAllowed =
+    allowedExtensions.includes(
+      extension
+    )
+
+  if (
+    !mimeAllowed ||
+    !extensionAllowed
+  ) {
+    return callback(
+      new Error(
+        "Format logo harus JPG, JPEG, PNG, atau WEBP"
+      ),
       false
     )
   }
 
-  cb(null, true)
+  return callback(null, true)
 }
 
+/*
+|--------------------------------------------------------------------------
+| MULTER INSTANCE
+|--------------------------------------------------------------------------
+*/
 const uploadLogo = multer({
   storage,
   fileFilter,
+
   limits: {
-    fileSize: 2 * 1024 * 1024
+    fileSize:
+      2 * 1024 * 1024,
+
+    files: 1
   }
 })
 
@@ -90,34 +158,65 @@ const uploadLogo = multer({
 | MULTER ERROR HANDLER
 |--------------------------------------------------------------------------
 */
-const handleUploadLogo = (req, res, next) => {
-  const upload = uploadLogo.single("logo")
+const handleUploadLogo = (
+  req,
+  res,
+  next
+) => {
+  const upload =
+    uploadLogo.single("logo")
 
   upload(req, res, (error) => {
     if (!error) {
       return next()
     }
 
-    if (error instanceof multer.MulterError) {
-      if (error.code === "LIMIT_FILE_SIZE") {
+    if (
+      error instanceof
+      multer.MulterError
+    ) {
+      if (
+        error.code ===
+        "LIMIT_FILE_SIZE"
+      ) {
+        return res.status(413).json({
+          sukses: false,
+          pesan:
+            "Ukuran logo maksimal 2MB",
+          error:
+            error.message
+        })
+      }
+
+      if (
+        error.code ===
+        "LIMIT_UNEXPECTED_FILE"
+      ) {
         return res.status(400).json({
           sukses: false,
-          pesan: "Ukuran logo maksimal 2MB",
-          error: error.message
+          pesan:
+            "Field file harus menggunakan nama logo",
+          error:
+            error.message
         })
       }
 
       return res.status(400).json({
         sukses: false,
-        pesan: "Gagal upload logo",
-        error: error.message
+        pesan:
+          "Gagal mengunggah logo",
+        error:
+          error.message
       })
     }
 
     return res.status(400).json({
       sukses: false,
-      pesan: error.message || "Gagal upload logo",
-      error: error.message
+      pesan:
+        error.message ||
+        "Gagal mengunggah logo",
+      error:
+        error.message || null
     })
   })
 }
@@ -135,20 +234,24 @@ const handleUploadLogo = (req, res, next) => {
  * @swagger
  * /stores:
  *   get:
- *     summary: Ambil semua data toko
- *     description: Owner, admin, dan kasir dapat melihat data toko sesuai akses sistem.
+ *     summary: Ambil semua toko milik owner
+ *     description: Mengambil semua toko milik owner yang sedang login. Owner lain tidak dapat melihat data toko tersebut.
  *     tags:
  *       - Stores
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Data toko berhasil diambil
+ *         description: Data toko milik owner berhasil diambil
+ *       401:
+ *         description: Token tidak ditemukan atau tidak valid
+ *       403:
+ *         description: Hanya owner yang dapat mengakses endpoint ini
  */
 router.get(
   "/",
   authMiddleware,
-  authorizeRoles("owner", "admin", "kasir"),
+  authorizeRoles("owner"),
   getAllStores
 )
 
@@ -156,21 +259,52 @@ router.get(
  * @swagger
  * /stores/my-stores:
  *   get:
- *     summary: Ambil toko milik user login
- *     description: Mengambil data toko berdasarkan user yang sedang login.
+ *     summary: Ambil toko sesuai user login
+ *     description: Owner mendapatkan seluruh toko miliknya. Admin dan kasir hanya mendapatkan toko yang terhubung melalui users.id_store.
  *     tags:
  *       - Stores
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Data toko saya berhasil diambil
+ *         description: Data toko user berhasil diambil
+ *       401:
+ *         description: Token tidak ditemukan atau tidak valid
+ *       403:
+ *         description: User belum terhubung dengan toko
  */
 router.get(
   "/my-stores",
   authMiddleware,
-  authorizeRoles("owner", "admin", "kasir"),
+  authorizeRoles(
+    "owner",
+    "admin",
+    "kasir"
+  ),
   getMyStores
+)
+
+/**
+ * @swagger
+ * /stores/usage:
+ *   get:
+ *     summary: Ambil penggunaan batas toko
+ *     description: Mengambil jumlah toko, batas toko, dan sisa toko berdasarkan paket aktif milik owner.
+ *     tags:
+ *       - Stores
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Penggunaan batas toko berhasil diambil
+ *       403:
+ *         description: Bukan owner atau tidak memiliki langganan aktif
+ */
+router.get(
+  "/usage",
+  authMiddleware,
+  authorizeRoles("owner"),
+  getMyStoreUsage
 )
 
 /**
@@ -178,16 +312,34 @@ router.get(
  * /stores/{id}:
  *   get:
  *     summary: Ambil detail toko
- *     description: Mengambil detail toko berdasarkan ID.
+ *     description: Owner hanya dapat melihat toko miliknya. Admin dan kasir hanya dapat melihat toko yang terhubung dengan akun mereka.
  *     tags:
  *       - Stores
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID toko
+ *     responses:
+ *       200:
+ *         description: Detail toko berhasil diambil
+ *       403:
+ *         description: Tidak memiliki akses ke toko
+ *       404:
+ *         description: Toko tidak ditemukan
  */
 router.get(
   "/:id",
   authMiddleware,
-  authorizeRoles("owner", "admin", "kasir"),
+  authorizeRoles(
+    "owner",
+    "admin",
+    "kasir"
+  ),
   getStoreById
 )
 
@@ -196,7 +348,7 @@ router.get(
  * /stores:
  *   post:
  *     summary: Tambah toko baru
- *     description: Owner membuat toko baru. Bisa upload logo dengan multipart/form-data.
+ *     description: Owner membuat toko baru sesuai batas paket langganan aktif. Kepemilikan toko otomatis menggunakan id_user owner dari JWT.
  *     tags:
  *       - Stores
  *     security:
@@ -223,6 +375,7 @@ router.get(
  *                 example: "081234567890"
  *               email:
  *                 type: string
+ *                 format: email
  *                 nullable: true
  *                 example: toko@siopos.com
  *               logo:
@@ -230,14 +383,19 @@ router.get(
  *                 format: binary
  *               status_toko:
  *                 type: string
- *                 enum: [aktif, nonaktif]
+ *                 enum:
+ *                   - aktif
+ *                   - nonaktif
  *                 example: aktif
  *               ppn_aktif:
  *                 type: string
- *                 enum: [ya, tidak]
+ *                 enum:
+ *                   - ya
+ *                   - tidak
  *                 example: ya
  *               ppn_persen:
  *                 type: number
+ *                 format: double
  *                 example: 11
  *         application/json:
  *           schema:
@@ -258,6 +416,7 @@ router.get(
  *                 example: "081234567890"
  *               email:
  *                 type: string
+ *                 format: email
  *                 nullable: true
  *                 example: toko@siopos.com
  *               logo:
@@ -266,15 +425,27 @@ router.get(
  *                 example: /uploads/stores/logo.png
  *               status_toko:
  *                 type: string
- *                 enum: [aktif, nonaktif]
+ *                 enum:
+ *                   - aktif
+ *                   - nonaktif
  *                 example: aktif
  *               ppn_aktif:
  *                 type: string
- *                 enum: [ya, tidak]
+ *                 enum:
+ *                   - ya
+ *                   - tidak
  *                 example: ya
  *               ppn_persen:
  *                 type: number
+ *                 format: double
  *                 example: 11
+ *     responses:
+ *       201:
+ *         description: Toko berhasil dibuat
+ *       403:
+ *         description: Bukan owner, tidak memiliki paket aktif, atau batas toko tercapai
+ *       409:
+ *         description: Nama toko sudah digunakan oleh owner
  */
 router.post(
   "/",
@@ -288,8 +459,8 @@ router.post(
  * @swagger
  * /stores/{id}:
  *   put:
- *     summary: Update toko
- *     description: Owner memperbarui data toko. Bisa upload logo baru dengan multipart/form-data.
+ *     summary: Perbarui toko
+ *     description: Owner hanya dapat memperbarui toko miliknya sendiri.
  *     tags:
  *       - Stores
  *     security:
@@ -324,6 +495,7 @@ router.post(
  *                 example: "081234567890"
  *               email:
  *                 type: string
+ *                 format: email
  *                 nullable: true
  *                 example: toko@siopos.com
  *               logo:
@@ -331,14 +503,19 @@ router.post(
  *                 format: binary
  *               status_toko:
  *                 type: string
- *                 enum: [aktif, nonaktif]
+ *                 enum:
+ *                   - aktif
+ *                   - nonaktif
  *                 example: aktif
  *               ppn_aktif:
  *                 type: string
- *                 enum: [ya, tidak]
+ *                 enum:
+ *                   - ya
+ *                   - tidak
  *                 example: ya
  *               ppn_persen:
  *                 type: number
+ *                 format: double
  *                 example: 11
  *         application/json:
  *           schema:
@@ -360,6 +537,7 @@ router.post(
  *                 example: "081234567890"
  *               email:
  *                 type: string
+ *                 format: email
  *                 nullable: true
  *                 example: toko@siopos.com
  *               logo:
@@ -368,15 +546,27 @@ router.post(
  *                 example: /uploads/stores/logo.png
  *               status_toko:
  *                 type: string
- *                 enum: [aktif, nonaktif]
+ *                 enum:
+ *                   - aktif
+ *                   - nonaktif
  *                 example: aktif
  *               ppn_aktif:
  *                 type: string
- *                 enum: [ya, tidak]
+ *                 enum:
+ *                   - ya
+ *                   - tidak
  *                 example: ya
  *               ppn_persen:
  *                 type: number
+ *                 format: double
  *                 example: 11
+ *     responses:
+ *       200:
+ *         description: Toko berhasil diperbarui
+ *       403:
+ *         description: Bukan pemilik toko
+ *       404:
+ *         description: Toko tidak ditemukan
  */
 router.put(
   "/:id",
@@ -390,8 +580,8 @@ router.put(
  * @swagger
  * /stores/{id}/logo:
  *   put:
- *     summary: Update logo toko
- *     description: Owner memperbarui logo toko menggunakan upload file.
+ *     summary: Perbarui logo toko
+ *     description: Owner hanya dapat memperbarui logo toko miliknya.
  *     tags:
  *       - Stores
  *     security:
@@ -409,10 +599,19 @@ router.put(
  *         multipart/form-data:
  *           schema:
  *             type: object
+ *             required:
+ *               - logo
  *             properties:
  *               logo:
  *                 type: string
  *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Logo toko berhasil diperbarui
+ *       403:
+ *         description: Bukan pemilik toko
+ *       404:
+ *         description: Toko tidak ditemukan
  */
 router.put(
   "/:id/logo",
@@ -427,11 +626,25 @@ router.put(
  * /stores/{id}:
  *   delete:
  *     summary: Hapus toko
- *     description: Owner menghapus toko berdasarkan ID.
+ *     description: Owner hanya dapat menghapus toko miliknya sendiri.
  *     tags:
  *       - Stores
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID toko
+ *     responses:
+ *       200:
+ *         description: Toko berhasil dihapus
+ *       403:
+ *         description: Bukan pemilik toko
+ *       404:
+ *         description: Toko tidak ditemukan
  */
 router.delete(
   "/:id",
