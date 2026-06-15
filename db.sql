@@ -1,3 +1,4 @@
+
 CREATE TABLE users (
     id_user INT AUTO_INCREMENT PRIMARY KEY,
 
@@ -6,21 +7,52 @@ CREATE TABLE users (
     nama_lengkap VARCHAR(150) NOT NULL,
     username VARCHAR(100) NOT NULL UNIQUE,
     email VARCHAR(150) NOT NULL UNIQUE,
+
+    email_verified_at DATETIME NULL,
+    verification_email_sent_at DATETIME NULL,
+
     no_hp VARCHAR(20) NULL,
 
     password VARCHAR(255) NOT NULL,
 
-    role ENUM('owner', 'admin', 'kasir') NOT NULL DEFAULT 'kasir',
+    role ENUM(
+        'owner',
+        'admin',
+        'kasir'
+    ) NOT NULL DEFAULT 'kasir',
 
-    status_akun ENUM('aktif', 'nonaktif') NOT NULL DEFAULT 'aktif',
+    status_akun ENUM(
+        'aktif',
+        'nonaktif'
+    ) NOT NULL DEFAULT 'nonaktif',
 
     foto VARCHAR(255) NULL,
 
     last_login DATETIME NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+
+    updated_at TIMESTAMP
+        DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP
 );
+
+
+CREATE TABLE auth_tokens ( id_token BIGINT AUTO_INCREMENT PRIMARY KEY,
+ id_user INT NOT NULL, 
+ token_hash VARCHAR(64) NOT NULL,
+  tipe_token ENUM( 'verifikasi_email', 'reset_password' ) NOT NULL, 
+  expires_at DATETIME NOT NULL, 
+  used_at DATETIME NULL,
+   created_at TIMESTAMP DEFAULT 
+   CURRENT_TIMESTAMP, CONSTRAINT
+    fk_auth_tokens_user FOREIGN KEY (id_user) REFERENCES users(id_user) ON DELETE CASCADE ON UPDATE CASCADE, 
+    UNIQUE KEY unique_auth_token_hash (token_hash), 
+    INDEX index_auth_tokens_user (id_user), 
+    INDEX index_auth_tokens_type (tipe_token),
+     INDEX index_auth_tokens_expired (expires_at),
+      INDEX index_auth_tokens_lookup
+       ( token_hash, tipe_token, used_at, expires_at ) );
 CREATE TABLE stores (
     id_store INT AUTO_INCREMENT PRIMARY KEY,
 
