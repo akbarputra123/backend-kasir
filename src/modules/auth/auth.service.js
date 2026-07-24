@@ -550,10 +550,29 @@ const login = async (data = {}) => {
 
   /*
   |--------------------------------------------------------------------------
-  | VALIDASI EMAIL
+  | VALIDASI ROLE
   |--------------------------------------------------------------------------
   */
-  if (!user.email_verified_at) {
+  const role = normalizeRole(user.role)
+
+  if (!role) {
+    throw new Error(
+      "Role user tidak valid."
+    )
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDASI EMAIL
+  |--------------------------------------------------------------------------
+  | Hanya OWNER yang wajib verifikasi email.
+  | Admin dan Kasir dapat login tanpa verifikasi email.
+  |--------------------------------------------------------------------------
+  */
+  if (
+    role === "owner" &&
+    !user.email_verified_at
+  ) {
     throw new Error(
       "Email belum diverifikasi. Silakan periksa email atau kirim ulang email aktivasi."
     )
@@ -572,27 +591,16 @@ const login = async (data = {}) => {
 
   /*
   |--------------------------------------------------------------------------
-  | VALIDASI ROLE
-  |--------------------------------------------------------------------------
-  */
-  const role = normalizeRole(user.role)
-
-  if (!role) {
-    throw new Error(
-      "Role user tidak valid."
-    )
-  }
-
-  /*
-  |--------------------------------------------------------------------------
   | VALIDASI TOKO
   |--------------------------------------------------------------------------
   */
   if (
     !user.id_store &&
-    (role === "owner" ||
+    (
+      role === "owner" ||
       role === "admin" ||
-      role === "kasir")
+      role === "kasir"
+    )
   ) {
     throw new Error(
       "Akun belum terhubung dengan toko."
