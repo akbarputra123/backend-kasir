@@ -15,6 +15,13 @@ const pool = require("../../config/database")
 | - users.id_store mengarah ke toko tempat mereka bekerja
 |--------------------------------------------------------------------------
 */
+/*
+|--------------------------------------------------------------------------
+| FIND USER BY USERNAME OR EMAIL
+|--------------------------------------------------------------------------
+| Digunakan untuk login menggunakan username atau email.
+|--------------------------------------------------------------------------
+*/
 const findUserByUsernameOrEmail = async (
   usernameOrEmail
 ) => {
@@ -27,16 +34,22 @@ const findUserByUsernameOrEmail = async (
     SELECT
       u.id_user,
       u.id_store,
+
       u.nama_lengkap,
       u.username,
       u.email,
+
       u.email_verified_at,
       u.verification_email_sent_at,
+
       u.no_hp,
       u.password,
+
       u.role,
       u.status_akun,
+
       u.foto,
+
       u.last_login,
       u.created_at,
       u.updated_at,
@@ -46,15 +59,23 @@ const findUserByUsernameOrEmail = async (
       s.no_hp AS no_hp_toko,
       s.email AS email_toko,
       s.logo AS logo_toko,
-      s.status_toko
+      s.status_toko,
+
+      bc.id_business_category,
+      bc.nama_kategori AS kategori_usaha
 
     FROM users u
 
     LEFT JOIN stores s
       ON s.id_store = u.id_store
 
-    WHERE u.username = ?
-       OR u.email = ?
+    LEFT JOIN business_categories bc
+      ON bc.id_business_category =
+         s.id_business_category
+
+    WHERE
+      u.username = ?
+      OR u.email = ?
 
     LIMIT 1
     `,
@@ -115,7 +136,19 @@ const findUserByUsername = async (username) => {
 | - Lupa password
 |--------------------------------------------------------------------------
 */
-const findUserByEmail = async (email) => {
+/*
+|--------------------------------------------------------------------------
+| FIND USER BY EMAIL
+|--------------------------------------------------------------------------
+| Digunakan untuk:
+| - Validasi registrasi
+| - Kirim ulang aktivasi
+| - Lupa password
+|--------------------------------------------------------------------------
+*/
+const findUserByEmail = async (
+  email
+) => {
   const value = String(email || "")
     .trim()
     .toLowerCase()
@@ -125,16 +158,22 @@ const findUserByEmail = async (email) => {
     SELECT
       u.id_user,
       u.id_store,
+
       u.nama_lengkap,
       u.username,
       u.email,
+
       u.email_verified_at,
       u.verification_email_sent_at,
+
       u.no_hp,
       u.password,
+
       u.role,
       u.status_akun,
+
       u.foto,
+
       u.last_login,
       u.created_at,
       u.updated_at,
@@ -144,12 +183,19 @@ const findUserByEmail = async (email) => {
       s.no_hp AS no_hp_toko,
       s.email AS email_toko,
       s.logo AS logo_toko,
-      s.status_toko
+      s.status_toko,
+
+      bc.id_business_category,
+      bc.nama_kategori AS kategori_usaha
 
     FROM users u
 
     LEFT JOIN stores s
       ON s.id_store = u.id_store
+
+    LEFT JOIN business_categories bc
+      ON bc.id_business_category =
+         s.id_business_category
 
     WHERE u.email = ?
 
@@ -168,22 +214,35 @@ const findUserByEmail = async (email) => {
 | Mengambil profil user berdasarkan ID pada JWT.
 |--------------------------------------------------------------------------
 */
+/*
+|--------------------------------------------------------------------------
+| FIND USER BY ID
+|--------------------------------------------------------------------------
+| Mengambil profil user berdasarkan ID dari JWT.
+|--------------------------------------------------------------------------
+*/
 const findUserById = async (id_user) => {
   const [rows] = await pool.query(
     `
     SELECT
       u.id_user,
       u.id_store,
+
       u.nama_lengkap,
       u.username,
       u.email,
+
       u.email_verified_at,
       u.verification_email_sent_at,
+
       u.no_hp,
       u.password,
+
       u.role,
       u.status_akun,
+
       u.foto,
+
       u.last_login,
       u.created_at,
       u.updated_at,
@@ -194,6 +253,9 @@ const findUserById = async (id_user) => {
       s.email AS email_toko,
       s.logo AS logo_toko,
       s.status_toko,
+
+      bc.id_business_category,
+      bc.nama_kategori AS kategori_usaha,
 
       CASE
         WHEN u.role = 'owner' THEN (
@@ -209,6 +271,9 @@ const findUserById = async (id_user) => {
     LEFT JOIN stores s
       ON s.id_store = u.id_store
 
+    LEFT JOIN business_categories bc
+      ON bc.id_business_category = s.id_business_category
+
     WHERE u.id_user = ?
 
     LIMIT 1
@@ -218,7 +283,6 @@ const findUserById = async (id_user) => {
 
   return rows[0] || null
 }
-
 /*
 |--------------------------------------------------------------------------
 | CREATE OWNER
@@ -229,59 +293,163 @@ const findUserById = async (id_user) => {
 | beberapa toko melalui stores.id_owner.
 |--------------------------------------------------------------------------
 */
-const createOwner = async (data) => {
-  const [result] = await pool.query(
-    `
-    INSERT INTO users
-    (
-      id_store,
-      nama_lengkap,
-      username,
-      email,
-      email_verified_at,
-      verification_email_sent_at,
-      no_hp,
-      password,
-      role,
-      status_akun
-    )
-    VALUES
-    (
-      NULL,
-      ?,
-      ?,
-      ?,
-      NULL,
-      NULL,
-      ?,
-      ?,
-      'owner',
-      'nonaktif'
-    )
-    `,
-    [
-      data.nama_lengkap,
-      data.username,
-      data.email,
-      data.no_hp || null,
-      data.password
-    ]
-  )
+/*
+|--------------------------------------------------------------------------
+| REGISTER OWNER
+|--------------------------------------------------------------------------
+| Membuat akun owner beserta toko pertamanya dalam satu transaksi.
+|
+| Flow:
+| 1. Insert users
+| 2. Insert stores
+| 3. Update users.id_store
+|--------------------------------------------------------------------------
+*/
+const registerOwner = async (data) => {
+  const connection = await pool.getConnection()
 
-  return {
-    id_user: result.insertId,
-    id_store: null,
-    nama_lengkap: data.nama_lengkap,
-    username: data.username,
-    email: data.email,
-    email_verified_at: null,
-    verification_email_sent_at: null,
-    no_hp: data.no_hp || null,
-    role: "owner",
-    status_akun: "nonaktif"
+  try {
+    await connection.beginTransaction()
+
+    /*
+    |--------------------------------------------------------------------------
+    | CREATE OWNER
+    |--------------------------------------------------------------------------
+    */
+    const [userResult] = await connection.query(
+      `
+      INSERT INTO users
+      (
+        id_store,
+        nama_lengkap,
+        username,
+        email,
+        email_verified_at,
+        verification_email_sent_at,
+        no_hp,
+        password,
+        role,
+        status_akun
+      )
+      VALUES
+      (
+        NULL,
+        ?,
+        ?,
+        ?,
+        NULL,
+        NULL,
+        ?,
+        ?,
+        'owner',
+        'nonaktif'
+      )
+      `,
+      [
+        data.nama_lengkap,
+        data.username,
+        data.email,
+        data.no_hp || null,
+        data.password
+      ]
+    )
+
+    const id_user = userResult.insertId
+
+    console.log("================================")
+    console.log("USER BERHASIL DIBUAT")
+    console.log("ID USER :", id_user)
+    console.log("EMAIL   :", data.email)
+    console.log("================================")
+
+    /*
+    |--------------------------------------------------------------------------
+    | CREATE STORE
+    |--------------------------------------------------------------------------
+    */
+    const [storeResult] = await connection.query(
+      `
+      INSERT INTO stores
+      (
+        id_owner,
+        id_business_category,
+        nama_toko,
+        logo
+      )
+      VALUES
+      (
+        ?,
+        ?,
+        ?,
+        ?
+      )
+      `,
+      [
+        id_user,
+        data.id_business_category,
+        data.nama_toko,
+        data.logo || null
+      ]
+    )
+
+    const id_store = storeResult.insertId
+
+    console.log("STORE BERHASIL DIBUAT")
+    console.log("ID STORE :", id_store)
+
+    /*
+    |--------------------------------------------------------------------------
+    | UPDATE DEFAULT STORE OWNER
+    |--------------------------------------------------------------------------
+    */
+    await connection.query(
+      `
+      UPDATE users
+      SET
+        id_store = ?,
+        updated_at = NOW()
+      WHERE id_user = ?
+      `,
+      [
+        id_store,
+        id_user
+      ]
+    )
+
+    console.log("DEFAULT STORE OWNER DIPERBARUI")
+
+    await connection.commit()
+
+    console.log("TRANSAKSI REGISTER BERHASIL")
+    console.log("================================")
+
+    return {
+      id_user,
+      id_store,
+
+      nama_lengkap: data.nama_lengkap,
+      username: data.username,
+      email: data.email,
+      no_hp: data.no_hp || null,
+
+      nama_toko: data.nama_toko,
+      id_business_category: data.id_business_category,
+      logo: data.logo || null,
+
+      role: "owner",
+      status_akun: "nonaktif",
+
+      email_verified_at: null,
+      verification_email_sent_at: null
+    }
+  } catch (error) {
+    await connection.rollback()
+    console.error("REGISTER OWNER MODEL ERROR:", error)
+    throw error
+  } finally {
+    connection.release()
   }
 }
-
 /*
 |--------------------------------------------------------------------------
 | CREATE AUTH TOKEN
@@ -304,6 +472,14 @@ const createAuthToken = async ({
 
   try {
     await connection.beginTransaction()
+
+    console.log("")
+    console.log("========== CREATE AUTH TOKEN ==========")
+    console.log("ID USER    :", id_user)
+    console.log("TOKEN HASH :", token_hash)
+    console.log("TIPE TOKEN :", tipe_token)
+    console.log("EXPIRES    :", expires_at)
+    console.log("=======================================")
 
     await connection.query(
       `
@@ -336,6 +512,27 @@ const createAuthToken = async ({
       ]
     )
 
+    const [check] = await connection.query(
+      `
+      SELECT
+        id_token,
+        id_user,
+        token_hash,
+        tipe_token,
+        expires_at,
+        used_at
+      FROM auth_tokens
+      WHERE id_token = ?
+      LIMIT 1
+      `,
+      [result.insertId]
+    )
+
+    console.log("")
+    console.log("========== HASIL INSERT DATABASE ==========")
+    console.log(check[0])
+    console.log("===========================================")
+
     await connection.commit()
 
     return {
@@ -346,6 +543,7 @@ const createAuthToken = async ({
     }
   } catch (error) {
     await connection.rollback()
+    console.error("CREATE AUTH TOKEN ERROR:", error)
     throw error
   } finally {
     connection.release()
@@ -363,6 +561,47 @@ const findValidAuthToken = async (
   token_hash,
   tipe_token
 ) => {
+  console.log("")
+  console.log("========== FIND VALID AUTH TOKEN ==========")
+  console.log("TOKEN HASH :", token_hash)
+  console.log("TIPE TOKEN :", tipe_token)
+
+  // Cek database yang sedang digunakan
+  const [db] = await pool.query(`
+    SELECT
+      DATABASE() AS database_name,
+      NOW() AS server_time
+  `)
+
+  console.log("DATABASE :", db[0].database_name)
+  console.log("SERVER TIME :", db[0].server_time)
+
+  // Cek apakah token benar-benar ada
+  const [checkToken] = await pool.query(
+    `
+    SELECT
+      id_token,
+      id_user,
+      token_hash,
+      tipe_token,
+      expires_at,
+      used_at
+    FROM auth_tokens
+    WHERE token_hash = ?
+    `,
+    [token_hash]
+  )
+
+  console.log("")
+  console.log("========== CEK TOKEN LANGSUNG ==========")
+  console.log("JUMLAH :", checkToken.length)
+
+  if (checkToken.length > 0) {
+    console.log(checkToken[0])
+  } else {
+    console.log("TOKEN TIDAK ADA DI DATABASE")
+  }
+
   const [rows] = await pool.query(
     `
     SELECT
@@ -396,23 +635,22 @@ const findValidAuthToken = async (
     [token_hash, tipe_token]
   )
 
+  console.log("")
+  console.log("========== HASIL QUERY ==========")
+  console.log("JUMLAH DATA :", rows.length)
+
+  if (rows.length > 0) {
+    console.log(rows[0])
+  } else {
+    console.log("DATA TIDAK DITEMUKAN")
+  }
+
+  console.log("=================================")
+  console.log("")
+
   return rows[0] || null
 }
 
-/*
-|--------------------------------------------------------------------------
-| FIND VALID RESET OTP
-|--------------------------------------------------------------------------
-| Digunakan untuk reset password menggunakan OTP 6 digit.
-|
-| OTP wajib cocok dengan:
-| - email user
-| - hash OTP
-| - tipe token reset_password
-| - belum pernah digunakan
-| - belum kedaluwarsa
-|--------------------------------------------------------------------------
-*/
 const findValidResetOtp = async ({
   email,
   otp_hash
@@ -734,23 +972,89 @@ const deleteExpiredAuthTokens = async () => {
   return result.affectedRows
 }
 
+/*
+|--------------------------------------------------------------------------
+| GET BUSINESS CATEGORIES
+|--------------------------------------------------------------------------
+| Mengambil seluruh kategori usaha yang aktif.
+| Digunakan pada halaman registrasi owner.
+|--------------------------------------------------------------------------
+*/
+const getBusinessCategories = async () => {
+  const [rows] = await pool.query(
+    `
+    SELECT
+      bc.id_business_category,
+      bc.nama_kategori
+    FROM business_categories bc
+    WHERE bc.status = 'aktif'
+    ORDER BY bc.nama_kategori ASC
+    `
+  )
+
+  return rows
+}
+
+/*
+|--------------------------------------------------------------------------
+| FIND BUSINESS CATEGORY BY ID
+|--------------------------------------------------------------------------
+| Digunakan untuk memvalidasi kategori usaha saat registrasi owner.
+|--------------------------------------------------------------------------
+*/
+const findBusinessCategoryById = async (
+  id_business_category
+) => {
+  const [rows] = await pool.query(
+    `
+    SELECT
+      bc.id_business_category,
+      bc.nama_kategori,
+      bc.status,
+      bc.created_at,
+      bc.updated_at
+    FROM business_categories bc
+    WHERE bc.id_business_category = ?
+      AND bc.status = 'aktif'
+    LIMIT 1
+    `,
+    [id_business_category]
+  )
+
+  return rows[0] || null
+}
 module.exports = {
+  // USER
   findUserByUsernameOrEmail,
   findUserByUsername,
   findUserByEmail,
   findUserById,
 
-  createOwner,
+  // BUSINESS CATEGORY
+  getBusinessCategories,
+  findBusinessCategoryById,
 
+  // REGISTER
+  registerOwner,
+
+  // AUTH TOKEN
   createAuthToken,
   findValidAuthToken,
   findValidResetOtp,
 
+  // EMAIL VERIFICATION
   updateVerificationEmailSentAt,
   verifyEmailWithToken,
+
+  // RESET PASSWORD
   resetPasswordWithToken,
 
+  // LOGIN
   updateLastLogin,
+
+  // STATISTIC
   countOwner,
+
+  // CLEANUP
   deleteExpiredAuthTokens
 }

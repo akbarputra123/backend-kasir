@@ -207,16 +207,25 @@ const renderActivationPage = ({
 | Akun berstatus nonaktif hingga email berhasil diverifikasi.
 |--------------------------------------------------------------------------
 */
+/*
+|--------------------------------------------------------------------------
+| REGISTER OWNER
+|--------------------------------------------------------------------------
+*/
 const registerOwner = async (req, res) => {
   try {
     const owner =
-      await authService.registerOwner(
-        req.body
-      )
+      await authService.registerOwner({
+        ...req.body,
+
+        logo: req.file
+          ? `/uploads/stores/${req.file.filename}`
+          : null
+      })
 
     const message = owner.email_sent
-      ? "Register owner berhasil. Silakan periksa email untuk mengaktifkan akun"
-      : "Register owner berhasil, tetapi email aktivasi gagal dikirim"
+      ? "Registrasi berhasil. Silakan periksa email untuk mengaktifkan akun."
+      : "Registrasi berhasil, tetapi email aktivasi gagal dikirim."
 
     return successResponse(
       res,
@@ -233,13 +242,46 @@ const registerOwner = async (req, res) => {
     return errorResponse(
       res,
       error.message ||
-        "Register owner gagal",
+        "Registrasi gagal",
       400,
       error.message
     )
   }
 }
+/*
+|--------------------------------------------------------------------------
+| GET BUSINESS CATEGORIES
+|--------------------------------------------------------------------------
+*/
+const getBusinessCategories = async (
+  req,
+  res
+) => {
+  try {
+    const result =
+      await authService.getBusinessCategories()
 
+    return successResponse(
+      res,
+      result.message,
+      result.data,
+      200
+    )
+  } catch (error) {
+    console.error(
+      "GET BUSINESS CATEGORY ERROR:",
+      error
+    )
+
+    return errorResponse(
+      res,
+      error.message ||
+        "Gagal mengambil kategori usaha",
+      400,
+      error.message
+    )
+  }
+}
 /*
 |--------------------------------------------------------------------------
 | RESEND VERIFICATION EMAIL
@@ -294,14 +336,19 @@ const resendVerificationEmail = async (
 */
 const verifyEmail = async (req, res) => {
   try {
+    console.log("")
+    console.log("========== VERIFY EMAIL CONTROLLER ==========")
+    console.log("ORIGINAL URL :", req.originalUrl)
+    console.log("QUERY        :", req.query)
+    console.log("TOKEN        :", req.query.token)
+    console.log("=============================================")
+    console.log("")
+
     const token = String(
       req.query.token || ""
     ).trim()
 
-    const result =
-      await authService.verifyEmail(
-        token
-      )
+    const result = await authService.verifyEmail(token)
 
     return res
       .status(200)
@@ -573,17 +620,27 @@ const checkToken = async (
     )
   }
 }
-
 module.exports = {
+  // REGISTER
   registerOwner,
+
+  // BUSINESS CATEGORY
+  getBusinessCategories,
+
+  // EMAIL
   resendVerificationEmail,
   verifyEmail,
 
+  // LOGIN
   login,
 
+  // PASSWORD
   forgotPassword,
   resetPassword,
 
+  // PROFILE
   getProfile,
+
+  // TOKEN
   checkToken
 }

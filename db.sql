@@ -59,33 +59,66 @@ CREATE TABLE auth_tokens ( id_token BIGINT AUTO_INCREMENT PRIMARY KEY,
      INDEX index_auth_tokens_expired (expires_at),
       INDEX index_auth_tokens_lookup
        ( token_hash, tipe_token, used_at, expires_at ) );
+
+CREATE TABLE business_categories (
+    id_business_category INT AUTO_INCREMENT PRIMARY KEY,
+
+    nama_kategori VARCHAR(100) NOT NULL UNIQUE,
+
+    status ENUM('aktif','nonaktif')
+        DEFAULT 'aktif',
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP
+);
+
 CREATE TABLE stores (
     id_store INT AUTO_INCREMENT PRIMARY KEY,
 
     id_owner INT NOT NULL,
+    id_business_category INT NOT NULL,
 
     nama_toko VARCHAR(150) NOT NULL,
+
     alamat TEXT NULL,
     no_hp VARCHAR(20) NULL,
     email VARCHAR(150) NULL,
 
     logo VARCHAR(255) NULL,
 
-    status_toko ENUM('aktif', 'nonaktif') NOT NULL DEFAULT 'aktif',
+    status_toko ENUM(
+        'aktif',
+        'nonaktif'
+    ) NOT NULL DEFAULT 'aktif',
 
-    ppn_aktif ENUM('ya', 'tidak') NOT NULL DEFAULT 'tidak',
+    ppn_aktif ENUM(
+        'ya',
+        'tidak'
+    ) NOT NULL DEFAULT 'tidak',
+
     ppn_persen DECIMAL(5,2) NOT NULL DEFAULT 0,
 
+    mata_uang VARCHAR(10) NOT NULL DEFAULT 'IDR',
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP
+        DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
 
     CONSTRAINT fk_stores_owner
         FOREIGN KEY (id_owner)
         REFERENCES users(id_user)
         ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_stores_business_category
+        FOREIGN KEY (id_business_category)
+        REFERENCES business_categories(id_business_category)
+        ON DELETE RESTRICT
         ON UPDATE CASCADE
 );
-
 CREATE TABLE categories (
     id_category INT AUTO_INCREMENT PRIMARY KEY,
 
@@ -131,6 +164,7 @@ CREATE TABLE discounts (
         ON DELETE CASCADE
         ON UPDATE CASCADE
 );
+
 CREATE TABLE products (
     id_product INT AUTO_INCREMENT PRIMARY KEY,
 
@@ -144,20 +178,29 @@ CREATE TABLE products (
     nama_produk VARCHAR(150) NOT NULL,
     deskripsi TEXT NULL,
 
-    harga_beli DECIMAL(15,2) NOT NULL DEFAULT 0,
-    harga_jual DECIMAL(15,2) NOT NULL DEFAULT 0,
+    harga_beli DECIMAL(15,2) NULL,
+    harga_jual DECIMAL(15,2) NOT NULL,
 
-    stok INT NOT NULL DEFAULT 0,
-    stok_minimum INT NOT NULL DEFAULT 0,
+    track_stock ENUM('ya', 'tidak')
+        NOT NULL DEFAULT 'ya',
 
-    satuan VARCHAR(50) NOT NULL DEFAULT 'pcs',
+    stok INT NULL,
+    stok_minimum INT NULL,
+
+    satuan VARCHAR(50) NULL,
 
     foto VARCHAR(255) NULL,
 
-    status_produk ENUM('aktif', 'nonaktif') NOT NULL DEFAULT 'aktif',
+    status_produk ENUM(
+        'aktif',
+        'nonaktif'
+    ) NOT NULL DEFAULT 'aktif',
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP
+        DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
 
     CONSTRAINT fk_products_store
         FOREIGN KEY (id_store)
@@ -177,10 +220,16 @@ CREATE TABLE products (
         ON DELETE SET NULL
         ON UPDATE CASCADE,
 
-    UNIQUE KEY unique_kode_produk_store (id_store, kode_produk),
-    UNIQUE KEY unique_barcode_store (id_store, barcode)
-);
+    UNIQUE KEY unique_kode_produk_store
+        (id_store, kode_produk),
 
+    UNIQUE KEY unique_barcode_store
+        (id_store, barcode),
+
+    INDEX idx_store (id_store),
+    INDEX idx_category (id_category),
+    INDEX idx_status (status_produk)
+);
 CREATE TABLE stock_logs (
     id_stock_log INT AUTO_INCREMENT PRIMARY KEY,
 

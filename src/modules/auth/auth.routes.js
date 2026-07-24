@@ -3,6 +3,7 @@ const express = require("express")
 
 const {
   registerOwner,
+  getBusinessCategories,
   resendVerificationEmail,
   verifyEmail,
   login,
@@ -11,11 +12,12 @@ const {
   getProfile,
   checkToken
 } = require("./auth.controller")
-
 const {
   authMiddleware
 } = require("../../middlewares/authMiddleware")
-
+const uploadStoreLogo = require(
+  "../../middlewares/uploadStoreLogo"
+)
 const router = express.Router()
 
 /*
@@ -29,16 +31,36 @@ const router = express.Router()
 
 /**
  * @swagger
+ * /auth/business-categories:
+ *   get:
+ *     summary: Daftar kategori usaha
+ *     description: Mengambil seluruh kategori usaha yang aktif untuk ditampilkan pada form registrasi owner.
+ *     tags:
+ *       - Auth
+ *     responses:
+ *       200:
+ *         description: Berhasil mengambil kategori usaha.
+ */
+router.get(
+  "/business-categories",
+  getBusinessCategories
+)
+
+/**
+ * @swagger
  * /auth/register-owner:
  *   post:
- *     summary: Registrasi akun owner
- *     description: Membuat akun owner baru untuk aplikasi SIOPOS. SIOPOS mendukung banyak owner. Akun dibuat dengan status nonaktif dan akan aktif setelah email berhasil diverifikasi.
+ *     summary: Registrasi owner dan toko
+ *     description: |
+ *       Membuat akun owner baru beserta toko pertama.
+ *       Akun akan berstatus **nonaktif** hingga email berhasil diverifikasi.
+ *       Endpoint ini menggunakan **multipart/form-data** karena mendukung upload logo toko.
  *     tags:
  *       - Auth
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
  *             type: object
  *             required:
@@ -47,42 +69,56 @@ const router = express.Router()
  *               - email
  *               - password
  *               - konfirmasi_password
+ *               - nama_toko
+ *               - id_business_category
  *             properties:
  *               nama_lengkap:
  *                 type: string
  *                 example: Akbar Saputra
+ *
  *               username:
  *                 type: string
  *                 minLength: 3
  *                 example: akbarsaputra
+ *
  *               email:
  *                 type: string
  *                 format: email
- *                 example: barltzyml@gmail.com
+ *                 example: akbar@gmail.com
+ *
  *               no_hp:
  *                 type: string
  *                 nullable: true
  *                 example: "081234567890"
+ *
  *               password:
  *                 type: string
  *                 format: password
  *                 minLength: 6
- *                 example: "password123"
+ *                 example: password123
+ *
  *               konfirmasi_password:
  *                 type: string
  *                 format: password
  *                 minLength: 6
- *                 example: "password123"
- *           example:
- *             nama_lengkap: Akbar Saputra
- *             username: akbarsaputra
- *             email: barltzyml@gmail.com
- *             no_hp: "081234567890"
- *             password: "password123"
- *             konfirmasi_password: "password123"
+ *                 example: password123
+ *
+ *               nama_toko:
+ *                 type: string
+ *                 example: Akbar Coffee
+ *
+ *               id_business_category:
+ *                 type: integer
+ *                 example: 1
+ *
+ *               logo:
+ *                 type: string
+ *                 format: binary
+ *                 description: Logo toko (opsional).
+ *
  *     responses:
  *       201:
- *         description: Registrasi berhasil dan email aktivasi telah diproses
+ *         description: Registrasi berhasil.
  *         content:
  *           application/json:
  *             schema:
@@ -91,52 +127,70 @@ const router = express.Router()
  *                 sukses:
  *                   type: boolean
  *                   example: true
+ *
  *                 pesan:
  *                   type: string
- *                   example: Register owner berhasil. Silakan periksa email untuk mengaktifkan akun
+ *                   example: Registrasi berhasil. Silakan periksa email untuk mengaktifkan akun.
+ *
  *                 data:
  *                   type: object
  *                   properties:
  *                     id_user:
  *                       type: integer
- *                       example: 7
+ *                       example: 1
+ *
  *                     id_store:
  *                       type: integer
- *                       nullable: true
- *                       example: null
+ *                       example: 1
+ *
  *                     nama_lengkap:
  *                       type: string
  *                       example: Akbar Saputra
+ *
  *                     username:
  *                       type: string
  *                       example: akbarsaputra
+ *
  *                     email:
  *                       type: string
  *                       format: email
- *                       example: barltzyml@gmail.com
+ *                       example: akbar@gmail.com
+ *
  *                     no_hp:
  *                       type: string
- *                       nullable: true
  *                       example: "081234567890"
+ *
  *                     role:
  *                       type: string
- *                       enum:
- *                         - owner
  *                       example: owner
+ *
  *                     status_akun:
  *                       type: string
- *                       enum:
- *                         - aktif
- *                         - nonaktif
  *                       example: nonaktif
+ *
+ *                     nama_toko:
+ *                       type: string
+ *                       example: Akbar Coffee
+ *
+ *                     logo_toko:
+ *                       type: string
+ *                       nullable: true
+ *                       example: /uploads/stores/logo.png
+ *
+ *                     id_business_category:
+ *                       type: integer
+ *                       example: 1
+ *
+ *                     kategori_usaha:
+ *                       type: string
+ *                       example: Coffee Shop
+ *
  *                     email_sent:
  *                       type: boolean
  *                       example: true
- *                     pesan:
- *                       type: string
- *                       example: Registrasi berhasil. Silakan periksa email untuk mengaktifkan akun.
+ *
  *       400:
- *         description: Registrasi gagal atau data tidak valid
+ *         description: Registrasi gagal atau data tidak valid.
  *         content:
  *           application/json:
  *             schema:
@@ -145,16 +199,18 @@ const router = express.Router()
  *                 sukses:
  *                   type: boolean
  *                   example: false
+ *
  *                 pesan:
  *                   type: string
- *                   example: Email sudah digunakan
+ *                   example: Email sudah digunakan.
+ *
  *                 error:
  *                   type: string
- *                   nullable: true
- *                   example: Email sudah digunakan
+ *                   example: Email sudah digunakan.
  */
 router.post(
   "/register-owner",
+  uploadStoreLogo.single("logo"),
   registerOwner
 )
 
