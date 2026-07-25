@@ -251,7 +251,7 @@ const handleUploadLogo = (
 router.get(
   "/",
   authMiddleware,
-  authorizeRoles("owner"),
+  authorizeRoles("owner", "admin", "kasir"),
   getAllStores
 )
 
