@@ -171,8 +171,7 @@ CREATE TABLE products (
     id_store INT NOT NULL,
     id_category INT NULL,
     id_discount INT NULL,
-
-    kode_produk VARCHAR(100) NOT NULL,
+    kode_produk VARCHAR(100) NULL,
     barcode VARCHAR(100) NULL,
 
     nama_produk VARCHAR(150) NOT NULL,
