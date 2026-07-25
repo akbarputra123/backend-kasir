@@ -1262,11 +1262,37 @@ const remove = async (id_product) => {
 
   return result.affectedRows > 0
 }
+/*
+|--------------------------------------------------------------------------
+| FIND STORE BY ID
+|--------------------------------------------------------------------------
+*/
+const findStoreById = async (
+  id_store
+) => {
+  const [rows] = await pool.query(
+    `
+    SELECT
+      id_store,
+      id_owner,
+      id_business_category,
+      nama_toko,
+      status_toko
+    FROM stores
+    WHERE id_store = ?
+    LIMIT 1
+    `,
+    [id_store]
+  )
+
+  return rows[0] || null
+}
 
 module.exports = {
   findAllByOwner,
   findAllByStore,
   findById,
+   findStoreById, // <-- tambahkan
   findStoreByIdAndOwner,
   findCategoryByIdAndStore,
   findDiscountByIdAndStore,
