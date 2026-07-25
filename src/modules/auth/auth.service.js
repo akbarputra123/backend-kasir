@@ -273,6 +273,9 @@ const resendVerificationEmail = async (data = {}) => {
 |--------------------------------------------------------------------------
 | VERIFY EMAIL
 |--------------------------------------------------------------------------
+| Setelah verifikasi berhasil, jika user adalah owner maka otomatis dibuatkan
+| subscription dengan paket Free (jika belum punya).
+|--------------------------------------------------------------------------
 */
 const verifyEmail = async (token) => {
   const rawToken = String(token || "").trim()
@@ -297,10 +300,40 @@ const verifyEmail = async (token) => {
     throw new Error("Tautan aktivasi tidak valid, sudah digunakan, atau sudah kedaluwarsa")
   }
 
+  // 1. Verifikasi email
   await authModel.verifyEmailWithToken({
     id_user: tokenData.id_user,
     id_token: tokenData.id_token
   })
+
+  // 2. Cek apakah user adalah owner
+  const user = await authModel.findUserById(tokenData.id_user)
+
+  if (user && user.role === 'owner') {
+    // 3. Pastikan paket Free tersedia (buat jika belum ada)
+    const freePlan = await authModel.ensureFreePlan()
+
+    // 4. Cek apakah owner sudah memiliki subscription aktif
+    const existingSub = await authModel.findActiveSubscriptionByOwner(user.id_user)
+
+    // 5. Jika belum punya subscription dan paket Free ada, buat subscription Free
+    if (!existingSub && freePlan) {
+      await authModel.createSubscription({
+        id_owner: user.id_user,
+        id_plan: freePlan.id_plan,
+        jumlah_bulan: 0, // 0 artinya tidak terbatas
+        tanggal_mulai: new Date(),
+        tanggal_berakhir: null, // tidak berakhir
+        harga: 0,
+        status_langganan: 'aktif',
+        metode_pembayaran: 'manual_transfer',
+        kode_invoice: authModel.generateInvoiceCode('INV-FREE'),
+        catatan: 'Subscription otomatis dari verifikasi email'
+      })
+
+      console.log(`[INFO] Subscription Free berhasil dibuat untuk owner ID: ${user.id_user}`)
+    }
+  }
 
   return {
     id_user: tokenData.id_user,
