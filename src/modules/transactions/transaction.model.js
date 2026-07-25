@@ -93,32 +93,25 @@ const findById = async (id_transaction) => {
     SELECT
       t.id_transaction,
       t.id_store,
-
       s.id_owner,
       s.id_business_category,
       s.nama_toko,
       s.status_toko,
-
       t.id_user,
       u.nama_lengkap AS nama_kasir,
-
       t.kode_transaksi,
       t.total_item,
       t.total_qty,
-
       t.subtotal,
       t.diskon,
       t.pajak,
       t.ppn_persen,
       t.grand_total,
-
       t.metode_pembayaran,
       t.jumlah_bayar,
       t.kembalian,
-
       t.status_transaksi,
       t.catatan,
-
       t.created_at,
       t.updated_at
     FROM transactions t
@@ -180,6 +173,7 @@ const findStoreByIdAndOwner = async (id_store, id_owner) => {
     SELECT
       id_store,
       id_owner,
+      id_business_category,
       nama_toko,
       status_toko,
       ppn_aktif,
@@ -208,6 +202,7 @@ const findStoreById = async (id_store) => {
     SELECT
       id_store,
       id_owner,
+      id_business_category,
       nama_toko,
       status_toko,
       ppn_aktif,
@@ -316,45 +311,6 @@ const createTransaction = async (data) => {
     const idTransaction = trxResult.insertId
 
     for (const item of data.items) {
-      const [productRows] = await connection.query(
-        `
-        SELECT
-          p.id_product,
-          p.id_store,
-          p.kode_produk,
-          p.nama_produk,
-          p.harga_jual,
-          p.stok,
-          p.status_produk
-        FROM products p
-        WHERE p.id_product = ?
-        LIMIT 1
-        FOR UPDATE
-        `,
-        [item.id_product]
-      )
-
-      const product = productRows[0] || null
-
-      if (!product) {
-        throw new Error("Produk tidak ditemukan")
-      }
-
-      if (Number(product.id_store) !== Number(data.id_store)) {
-        throw new Error(`Produk ${product.nama_produk} bukan milik toko ini`)
-      }
-
-      if (product.status_produk !== "aktif") {
-        throw new Error(`Produk ${product.nama_produk} sedang nonaktif`)
-      }
-
-      if (Number(product.stok) < Number(item.qty)) {
-        throw new Error(`Stok produk ${product.nama_produk} tidak mencukupi`)
-      }
-
-      const stokSebelum = Number(product.stok)
-      const stokSesudah = stokSebelum - Number(item.qty)
-
       await connection.query(
         `
         INSERT INTO transaction_items
@@ -377,55 +333,18 @@ const createTransaction = async (data) => {
         `,
         [
           idTransaction,
-          product.id_product,
-          product.kode_produk,
-          product.nama_produk,
-
+          item.id_product,
+          item.kode_produk,
+          item.nama_produk,
           item.harga_asli,
           item.id_discount || null,
           item.nama_diskon || null,
           item.tipe_diskon || null,
           item.nilai_diskon || 0,
           item.diskon || 0,
-
           item.harga_jual,
           item.qty,
           item.subtotal
-        ]
-      )
-
-      await connection.query(
-        `
-        UPDATE products
-        SET stok = ?
-        WHERE id_product = ?
-        `,
-        [stokSesudah, product.id_product]
-      )
-
-      await connection.query(
-        `
-        INSERT INTO stock_logs
-        (
-          id_store,
-          id_product,
-          id_user,
-          tipe,
-          jumlah,
-          stok_sebelum,
-          stok_sesudah,
-          keterangan
-        )
-        VALUES (?, ?, ?, 'keluar', ?, ?, ?, ?)
-        `,
-        [
-          data.id_store,
-          product.id_product,
-          data.id_user || null,
-          item.qty,
-          stokSebelum,
-          stokSesudah,
-          `Transaksi ${kodeTransaksi}`
         ]
       )
     }
@@ -448,7 +367,7 @@ const createTransaction = async (data) => {
 |--------------------------------------------------------------------------
 | CANCEL TRANSACTION
 |--------------------------------------------------------------------------
-| Membatalkan transaksi dan mengembalikan stok.
+| Membatalkan transaksi tanpa mengembalikan stok.
 |--------------------------------------------------------------------------
 */
 const cancelTransaction = async (id_transaction, data) => {
@@ -481,76 +400,6 @@ const cancelTransaction = async (id_transaction, data) => {
 
     if (trx.status_transaksi === "dibatalkan") {
       throw new Error("Transaksi sudah dibatalkan")
-    }
-
-    const [items] = await connection.query(
-      `
-      SELECT
-        id_product,
-        qty
-      FROM transaction_items
-      WHERE id_transaction = ?
-      `,
-      [id_transaction]
-    )
-
-    for (const item of items) {
-      if (!item.id_product) continue
-
-      const [productRows] = await connection.query(
-        `
-        SELECT
-          id_product,
-          stok
-        FROM products
-        WHERE id_product = ?
-        LIMIT 1
-        FOR UPDATE
-        `,
-        [item.id_product]
-      )
-
-      const product = productRows[0] || null
-
-      if (!product) continue
-
-      const stokSebelum = Number(product.stok)
-      const stokSesudah = stokSebelum + Number(item.qty)
-
-      await connection.query(
-        `
-        UPDATE products
-        SET stok = ?
-        WHERE id_product = ?
-        `,
-        [stokSesudah, item.id_product]
-      )
-
-      await connection.query(
-        `
-        INSERT INTO stock_logs
-        (
-          id_store,
-          id_product,
-          id_user,
-          tipe,
-          jumlah,
-          stok_sebelum,
-          stok_sesudah,
-          keterangan
-        )
-        VALUES (?, ?, ?, 'masuk', ?, ?, ?, ?)
-        `,
-        [
-          trx.id_store,
-          item.id_product,
-          data.id_user || null,
-          item.qty,
-          stokSebelum,
-          stokSesudah,
-          `Pembatalan transaksi ${trx.kode_transaksi}`
-        ]
-      )
     }
 
     await connection.query(
