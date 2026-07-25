@@ -5,12 +5,15 @@ const { errorResponse } = require("../utils/response")
 |--------------------------------------------------------------------------
 | NORMALIZE ROLE
 |--------------------------------------------------------------------------
+| Menambahkan "super_admin" sebagai role yang valid.
+|--------------------------------------------------------------------------
 */
 const normalizeRole = (role) => {
   const value = String(role || "")
     .toLowerCase()
     .trim()
 
+  if (value === "super_admin") return "super_admin"
   if (value === "owner") return "owner"
   if (value === "admin") return "admin"
   if (value === "kasir") return "kasir"
