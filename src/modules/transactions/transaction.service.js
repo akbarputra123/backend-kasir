@@ -239,59 +239,46 @@ const createTransaction = async (data, currentUser) => {
     if (Number(item.qty) <= 0) {
       throw new Error("Qty produk harus lebih dari 0")
     }
-
-   const product = await productModel.findById(item.id_product)
+const product = await productModel.findById(item.id_product)
 
 if (!product) {
   throw new Error("Produk tidak ditemukan")
 }
 
+// =====================================================
+// VALIDASI TOKO
+// =====================================================
 if (Number(product.id_store) !== Number(finalStoreId)) {
-  throw new Error(`Produk ${product.nama_produk} bukan milik toko ini`)
-}
-
-// =====================================================
-// VALIDASI KATEGORI BISNIS
-// =====================================================
-if (
-  Number(product.id_business_category) !==
-  Number(storeData.id_business_category)
-) {
   throw new Error(
-    `Produk ${product.nama_produk} tidak sesuai dengan kategori bisnis toko`
+    `Produk ${product.nama_produk} bukan milik toko ini`
   )
 }
 
+// =====================================================
+// STATUS PRODUK
+// =====================================================
 if (product.status_produk !== "aktif") {
-  throw new Error(`Produk ${product.nama_produk} sedang nonaktif`)
+  throw new Error(
+    `Produk ${product.nama_produk} sedang nonaktif`
+  )
 }
 
 // =====================================================
-// CEK STOK BERDASARKAN KATEGORI BISNIS
-// 1 = Retail  -> menggunakan stok
-// 2 = Coffee Shop -> tidak menggunakan stok
+// CEK STOK BERDASARKAN JENIS BISNIS
+//
+// id_business_category
+// 1 = Retail        -> menggunakan stok
+// 2 = Coffee Shop   -> tidak menggunakan stok
+// selain itu        -> menggunakan stok
 // =====================================================
-switch (Number(storeData.id_business_category)) {
-  case 1: // Retail
-    if (Number(product.stok) < Number(item.qty)) {
-      throw new Error(
-        `Stok produk ${product.nama_produk} tidak mencukupi`
-      )
-    }
-    break
+const businessCategory = Number(storeData.id_business_category)
 
-  case 2: // Coffee Shop
-    // Tidak menggunakan stok
-    break
-
-  default:
-    // Default: gunakan stok
-    if (Number(product.stok) < Number(item.qty)) {
-      throw new Error(
-        `Stok produk ${product.nama_produk} tidak mencukupi`
-      )
-    }
-    break
+if (businessCategory !== 2) {
+  if (Number(product.stok) < Number(item.qty)) {
+    throw new Error(
+      `Stok produk ${product.nama_produk} tidak mencukupi`
+    )
+  }
 }
 
 const qty = Number(item.qty)
