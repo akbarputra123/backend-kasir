@@ -274,7 +274,7 @@ const resendVerificationEmail = async (data = {}) => {
 | VERIFY EMAIL
 |--------------------------------------------------------------------------
 | Setelah verifikasi berhasil, jika user adalah owner maka otomatis dibuatkan
-| subscription dengan paket Free (jika belum punya).
+| subscription dengan paket Free (dengan tanggal_berakhir diisi 10000 hari ke depan).
 |--------------------------------------------------------------------------
 */
 const verifyEmail = async (token) => {
@@ -318,20 +318,26 @@ const verifyEmail = async (token) => {
 
     // 5. Jika belum punya subscription dan paket Free ada, buat subscription Free
     if (!existingSub && freePlan) {
+      // Tanggal mulai = sekarang
+      const tanggalMulai = new Date()
+      // Tanggal berakhir = 10000 hari ke depan (agar tidak null)
+      const tanggalBerakhir = new Date(tanggalMulai)
+      tanggalBerakhir.setDate(tanggalBerakhir.getDate() + 10000) // +10000 hari
+
       await authModel.createSubscription({
         id_owner: user.id_user,
         id_plan: freePlan.id_plan,
         jumlah_bulan: 0, // 0 artinya tidak terbatas
-        tanggal_mulai: new Date(),
-        tanggal_berakhir: null, // tidak berakhir
+        tanggal_mulai: tanggalMulai,
+        tanggal_berakhir: tanggalBerakhir, // SEKARANG TIDAK NULL
         harga: 0,
         status_langganan: 'aktif',
         metode_pembayaran: 'manual_transfer',
         kode_invoice: authModel.generateInvoiceCode('INV-FREE'),
-        catatan: 'Subscription otomatis dari verifikasi email'
+        catatan: 'Subscription otomatis dari verifikasi email (Free, berakhir 10000 hari)'
       })
 
-      console.log(`[INFO] Subscription Free berhasil dibuat untuk owner ID: ${user.id_user}`)
+      console.log(`[INFO] Subscription Free berhasil dibuat untuk owner ID: ${user.id_user} dengan tanggal_berakhir = ${tanggalBerakhir}`)
     }
   }
 
