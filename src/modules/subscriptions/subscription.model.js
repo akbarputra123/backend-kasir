@@ -417,6 +417,27 @@ const expireOldSubscriptions = async () => {
   return result.affectedRows
 }
 
+/*
+|--------------------------------------------------------------------------
+| EXPIRE ALL ACTIVE SUBSCRIPTIONS FOR OWNER (EXCEPT ONE)
+|--------------------------------------------------------------------------
+| Digunakan saat aktivasi subscription baru untuk menonaktifkan yang lama
+|--------------------------------------------------------------------------
+*/
+const expireAllActiveSubscriptionsForOwner = async (id_owner, excludeId) => {
+  const [result] = await pool.query(
+    `
+    UPDATE subscriptions
+    SET status_langganan = 'expired'
+    WHERE id_owner = ?
+      AND status_langganan = 'aktif'
+      AND id_subscription != ?
+    `,
+    [id_owner, excludeId]
+  )
+  return result.affectedRows
+}
+
 module.exports = {
   findActivePlans,
   findPlanById,
@@ -428,5 +449,6 @@ module.exports = {
   createCheckout,
   activateSubscription,
   cancelSubscription,
-  expireOldSubscriptions
+  expireOldSubscriptions,
+  expireAllActiveSubscriptionsForOwner
 }
