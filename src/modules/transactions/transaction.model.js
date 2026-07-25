@@ -332,20 +332,24 @@ const createTransaction = async (data) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
-          idTransaction,
-          item.id_product,
-          item.kode_produk,
-          item.nama_produk,
-          item.harga_asli,
-          item.id_discount || null,
-          item.nama_diskon || null,
-          item.tipe_diskon || null,
-          item.nilai_diskon || 0,
-          item.diskon || 0,
-          item.harga_jual,
-          item.qty,
-          item.subtotal
-        ]
+  idTransaction,
+  item.id_product,
+
+  item.kode_produk || "",
+  item.nama_produk || "",
+
+  Number(item.harga_asli || 0),
+
+  item.id_discount || null,
+  item.nama_diskon || null,
+  item.tipe_diskon || null,
+  Number(item.nilai_diskon || 0),
+  Number(item.diskon || 0),
+
+  Number(item.harga_jual || 0),
+  Number(item.qty || 1),
+  Number(item.subtotal || 0)
+]
       )
     }
 

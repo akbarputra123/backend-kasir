@@ -161,11 +161,15 @@ const createTransaction = async (data, currentUser) => {
     catatan
   } = data
 
-  if (!items || !Array.isArray(items) || items.length === 0) {
+  if (!Array.isArray(items) || items.length === 0) {
     throw new Error("Item transaksi wajib diisi")
   }
 
   let finalStoreId = id_store
+
+  // =====================================================
+  // VALIDASI TOKO
+  // =====================================================
 
   if (currentUser.role === "owner") {
     if (!id_store) {
@@ -209,17 +213,15 @@ const createTransaction = async (data, currentUser) => {
       ? Number(storeData.ppn_persen || 0)
       : 0
 
-  if (ppnPersen < 0) {
-    throw new Error("PPN toko tidak boleh kurang dari 0")
-  }
-
-  if (ppnPersen > 100) {
-    throw new Error("PPN toko tidak boleh lebih dari 100")
+  if (ppnPersen < 0 || ppnPersen > 100) {
+    throw new Error("PPN toko tidak valid")
   }
 
   if (
     metode_pembayaran &&
-    !["tunai", "transfer", "qris", "debit", "ewallet"].includes(metode_pembayaran)
+    !["tunai", "transfer", "qris", "debit", "ewallet"].includes(
+      metode_pembayaran
+    )
   ) {
     throw new Error("Metode pembayaran tidak valid")
   }
@@ -231,65 +233,73 @@ const createTransaction = async (data, currentUser) => {
   let subtotalSetelahDiskon = 0
   let totalQty = 0
 
+  const businessCategory = Number(storeData.id_business_category)
+
+  // =====================================================
+  // VALIDASI ITEM
+  // =====================================================
+
   for (const item of items) {
     if (!item.id_product || !item.qty) {
       throw new Error("Setiap item wajib memiliki id_product dan qty")
     }
 
-    if (Number(item.qty) <= 0) {
+    const qty = Number(item.qty)
+
+    if (qty <= 0) {
       throw new Error("Qty produk harus lebih dari 0")
     }
-const product = await productModel.findById(item.id_product)
 
-if (!product) {
-  throw new Error("Produk tidak ditemukan")
-}
+    const product = await productModel.findById(item.id_product)
 
-// =====================================================
-// VALIDASI TOKO
-// =====================================================
-if (Number(product.id_store) !== Number(finalStoreId)) {
-  throw new Error(
-    `Produk ${product.nama_produk} bukan milik toko ini`
-  )
-}
+    if (!product) {
+      throw new Error("Produk tidak ditemukan")
+    }
 
-// =====================================================
-// STATUS PRODUK
-// =====================================================
-if (product.status_produk !== "aktif") {
-  throw new Error(
-    `Produk ${product.nama_produk} sedang nonaktif`
-  )
-}
+    if (Number(product.id_store) !== Number(finalStoreId)) {
+      throw new Error(
+        `Produk ${product.nama_produk} bukan milik toko ini`
+      )
+    }
 
-// =====================================================
-// CEK STOK
-// Hanya Retail (id_business_category = 1)
-// =====================================================
-const businessCategory = Number(storeData.id_business_category)
+    if (product.status_produk !== "aktif") {
+      throw new Error(
+        `Produk ${product.nama_produk} sedang nonaktif`
+      )
+    }
 
-if (businessCategory === 1) {
-  if (Number(product.stok) < Number(item.qty)) {
-    throw new Error(
-      `Stok produk ${product.nama_produk} tidak mencukupi`
-    )
-  }
-}
+    // ===============================================
+    // RETAIL -> CEK STOK
+    // COFFEE SHOP -> TIDAK CEK STOK
+    // ===============================================
 
-const qty = Number(item.qty)
-const hargaAsli = Number(product.harga_jual || 0)
+    if (businessCategory === 1) {
+      const stok = Number(product.stok || 0)
 
-if (hargaAsli < 0) {
-  throw new Error(
-    `Harga produk ${product.nama_produk} tidak valid`
-  )
-}
+      if (stok < qty) {
+        throw new Error(
+          `Stok produk ${product.nama_produk} tidak mencukupi`
+        )
+      }
+    }
+
+    const hargaAsli = Number(product.harga_jual || 0)
+
+    if (hargaAsli < 0) {
+      throw new Error(
+        `Harga produk ${product.nama_produk} tidak valid`
+      )
+    }
 
     const discountResult = calculateProductDiscount(product)
 
-    const diskonSatuan = Number(discountResult.diskon_satuan || 0)
-    const hargaFinal = Number(discountResult.harga_final || 0)
+    const diskonSatuan = Number(
+      discountResult.diskon_satuan || 0
+    )
+
+    const hargaFinal = Number(
+      discountResult.harga_final || 0
+    )
 
     const subtotalItemAsli = hargaAsli * qty
     const totalDiskonItem = diskonSatuan * qty
@@ -297,13 +307,20 @@ if (hargaAsli < 0) {
 
     normalizedItems.push({
       id_product: product.id_product,
+
+      // WAJIB
+      kode_produk: product.kode_produk || "",
+      nama_produk: product.nama_produk,
+
       qty,
 
       harga_asli: hargaAsli,
+
       id_discount: discountResult.id_discount,
       nama_diskon: discountResult.nama_diskon,
       tipe_diskon: discountResult.tipe_diskon,
       nilai_diskon: discountResult.nilai_diskon,
+
       diskon: totalDiskonItem,
 
       harga_jual: hargaFinal,
@@ -316,12 +333,11 @@ if (hargaAsli < 0) {
     totalQty += qty
   }
 
-  const pajak = subtotalSetelahDiskon * (ppnPersen / 100)
-  const grandTotal = subtotalSetelahDiskon + pajak
+  const pajak =
+    subtotalSetelahDiskon * (ppnPersen / 100)
 
-  if (grandTotal < 0) {
-    throw new Error("Grand total tidak boleh kurang dari 0")
-  }
+  const grandTotal =
+    subtotalSetelahDiskon + pajak
 
   const finalJumlahBayar = Number(jumlah_bayar || 0)
 
@@ -329,28 +345,37 @@ if (hargaAsli < 0) {
     throw new Error("Jumlah bayar kurang dari grand total")
   }
 
-  const kembalian = finalJumlahBayar - grandTotal
+  const kembalian =
+    finalJumlahBayar - grandTotal
 
-  const result = await transactionModel.createTransaction({
-    id_store: finalStoreId,
-    id_user: currentUser.id_user,
-    total_item: normalizedItems.length,
-    total_qty: totalQty,
+  const result =
+    await transactionModel.createTransaction({
+      id_store: finalStoreId,
+      id_user: currentUser.id_user,
 
-    subtotal: subtotalAsli,
-    diskon: totalDiskonProduk,
-    pajak,
-    ppn_persen: ppnPersen,
-    grand_total: grandTotal,
+      total_item: normalizedItems.length,
+      total_qty: totalQty,
 
-    metode_pembayaran: metode_pembayaran || "tunai",
-    jumlah_bayar: finalJumlahBayar,
-    kembalian,
-    catatan,
-    items: normalizedItems
-  })
+      subtotal: subtotalAsli,
+      diskon: totalDiskonProduk,
+      pajak,
+      ppn_persen: ppnPersen,
+      grand_total: grandTotal,
 
-  return await getTransactionById(result.id_transaction, currentUser)
+      metode_pembayaran:
+        metode_pembayaran || "tunai",
+
+      jumlah_bayar: finalJumlahBayar,
+      kembalian,
+      catatan,
+
+      items: normalizedItems
+    })
+
+  return await getTransactionById(
+    result.id_transaction,
+    currentUser
+  )
 }
 
 /*
