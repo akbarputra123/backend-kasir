@@ -5,7 +5,9 @@ const {
   getMySubscription,
   checkoutSubscription,
   activateSubscription,
-  cancelSubscription
+  cancelSubscription,
+  upgradeSubscription,   // tambahan
+  extendSubscription     // tambahan
 } = require("./subscription.controller")
 
 const {
@@ -66,8 +68,8 @@ router.get(
  * @swagger
  * /subscriptions/checkout:
  *   post:
- *     summary: Checkout paket langganan
- *     description: Owner memilih paket langganan dan membuat invoice pending.
+ *     summary: Checkout paket langganan (dengan jumlah bulan)
+ *     description: Owner memilih paket dan jumlah bulan untuk membuat invoice pending.
  *     tags:
  *       - Subscriptions
  *     security:
@@ -84,13 +86,17 @@ router.get(
  *               id_plan:
  *                 type: integer
  *                 example: 1
+ *               jumlah_bulan:
+ *                 type: integer
+ *                 example: 3
+ *                 default: 1
  *               metode_pembayaran:
  *                 type: string
  *                 enum: [manual_transfer, qris_manual]
  *                 example: manual_transfer
  *               catatan:
  *                 type: string
- *                 example: Checkout paket Basic
+ *                 example: Checkout paket Business 3 bulan
  *     responses:
  *       201:
  *         description: Checkout langganan berhasil dibuat
@@ -106,8 +112,8 @@ router.post(
  * @swagger
  * /subscriptions/activate/{id_subscription}:
  *   post:
- *     summary: Aktifkan subscription
- *     description: Aktivasi manual subscription. Untuk production, endpoint ini sebaiknya hanya untuk super admin.
+ *     summary: Aktifkan subscription (hanya super_admin)
+ *     description: Aktivasi manual subscription. Hanya dapat diakses oleh super_admin.
  *     tags:
  *       - Subscriptions
  *     security:
@@ -126,7 +132,7 @@ router.post(
 router.post(
   "/activate/:id_subscription",
   authMiddleware,
-  authorizeRoles("owner"),
+  authorizeRoles("super_admin"),   // diubah: hanya super_admin
   activateSubscription
 )
 
@@ -166,6 +172,93 @@ router.post(
   authMiddleware,
   authorizeRoles("owner"),
   cancelSubscription
+)
+
+/**
+ * @swagger
+ * /subscriptions/upgrade/{id_subscription}:
+ *   post:
+ *     summary: Upgrade ke paket lebih tinggi (reset masa berlaku)
+ *     description: Owner mengganti plan aktif ke plan yang lebih mahal, dengan jumlah bulan tertentu. Masa berlaku dihitung ulang dari sekarang.
+ *     tags:
+ *       - Subscriptions
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id_subscription
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID subscription aktif
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - new_plan_id
+ *             properties:
+ *               new_plan_id:
+ *                 type: integer
+ *                 example: 2
+ *               jumlah_bulan:
+ *                 type: integer
+ *                 example: 3
+ *                 default: 1
+ *     responses:
+ *       200:
+ *         description: Langganan berhasil di-upgrade
+ */
+router.post(
+  "/upgrade/:id_subscription",
+  authMiddleware,
+  authorizeRoles("owner"),
+  upgradeSubscription
+)
+
+/**
+ * @swagger
+ * /subscriptions/extend/{id_subscription}:
+ *   post:
+ *     summary: Perpanjang masa aktif (tambah bulan, tanpa reset)
+ *     description: Owner menambahkan bulan ke masa aktif yang sedang berjalan. Tidak mengubah tanggal mulai, hanya memperpanjang tanggal berakhir.
+ *     tags:
+ *       - Subscriptions
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id_subscription
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID subscription aktif
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - additional_months
+ *             properties:
+ *               additional_months:
+ *                 type: integer
+ *                 example: 2
+ *               catatan:
+ *                 type: string
+ *                 example: Perpanjangan 2 bulan
+ *     responses:
+ *       200:
+ *         description: Langganan berhasil diperpanjang
+ */
+router.post(
+  "/extend/:id_subscription",
+  authMiddleware,
+  authorizeRoles("owner"),
+  extendSubscription
 )
 
 module.exports = router

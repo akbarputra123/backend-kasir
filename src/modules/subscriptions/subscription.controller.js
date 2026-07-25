@@ -9,7 +9,6 @@ const { successResponse, errorResponse } = require("../../utils/response")
 const getPlans = async (req, res) => {
   try {
     const plans = await subscriptionService.getPlans()
-
     return successResponse(
       res,
       "Data paket langganan berhasil diambil",
@@ -34,7 +33,6 @@ const getPlans = async (req, res) => {
 const getMySubscription = async (req, res) => {
   try {
     const subscription = await subscriptionService.getMySubscription(req.user)
-
     return successResponse(
       res,
       "Data langganan berhasil diambil",
@@ -55,6 +53,8 @@ const getMySubscription = async (req, res) => {
 |--------------------------------------------------------------------------
 | CHECKOUT SUBSCRIPTION
 |--------------------------------------------------------------------------
+| Body: { id_plan, jumlah_bulan?, metode_pembayaran?, catatan? }
+|--------------------------------------------------------------------------
 */
 const checkoutSubscription = async (req, res) => {
   try {
@@ -62,7 +62,6 @@ const checkoutSubscription = async (req, res) => {
       req.body,
       req.user
     )
-
     return successResponse(
       res,
       "Checkout langganan berhasil dibuat",
@@ -90,7 +89,6 @@ const activateSubscription = async (req, res) => {
       req.params.id_subscription,
       req.user
     )
-
     return successResponse(
       res,
       "Langganan berhasil diaktifkan",
@@ -109,7 +107,9 @@ const activateSubscription = async (req, res) => {
 
 /*
 |--------------------------------------------------------------------------
-| CANCEL SUBSCRIPTION
+| CANCEL SUBSCRIPTION (HANYA PENDING)
+|--------------------------------------------------------------------------
+| Body: { catatan? }
 |--------------------------------------------------------------------------
 */
 const cancelSubscription = async (req, res) => {
@@ -119,7 +119,6 @@ const cancelSubscription = async (req, res) => {
       req.body,
       req.user
     )
-
     return successResponse(
       res,
       "Langganan berhasil dibatalkan",
@@ -136,10 +135,72 @@ const cancelSubscription = async (req, res) => {
   }
 }
 
+/*
+|--------------------------------------------------------------------------
+| UPGRADE SUBSCRIPTION (GUNAKAN ID SUBSCRIPTION AKTIF)
+|--------------------------------------------------------------------------
+| Body: { new_plan_id, jumlah_bulan? }
+|--------------------------------------------------------------------------
+*/
+const upgradeSubscription = async (req, res) => {
+  try {
+    const result = await subscriptionService.upgradeSubscription(
+      req.params.id_subscription,
+      req.body,
+      req.user
+    )
+    return successResponse(
+      res,
+      "Langganan berhasil di-upgrade",
+      result,
+      200
+    )
+  } catch (error) {
+    return errorResponse(
+      res,
+      error.message || "Gagal melakukan upgrade langganan",
+      400,
+      error.message
+    )
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
+| EXTEND SUBSCRIPTION (TAMBAH BULAN KE MASA AKTIF)
+|--------------------------------------------------------------------------
+| Body: { additional_months, catatan? }
+|--------------------------------------------------------------------------
+*/
+const extendSubscription = async (req, res) => {
+  try {
+    const result = await subscriptionService.extendSubscription(
+      req.params.id_subscription,
+      req.body,
+      req.user
+    )
+    return successResponse(
+      res,
+      "Langganan berhasil diperpanjang",
+      result,
+      200
+    )
+  } catch (error) {
+    return errorResponse(
+      res,
+      error.message || "Gagal memperpanjang langganan",
+      400,
+      error.message
+    )
+  }
+}
+
 module.exports = {
   getPlans,
   getMySubscription,
   checkoutSubscription,
   activateSubscription,
-  cancelSubscription
+  cancelSubscription,
+  upgradeSubscription,   // tambahan
+  extendSubscription     // tambahan
 }

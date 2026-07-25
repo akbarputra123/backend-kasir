@@ -372,6 +372,8 @@ CREATE TABLE subscriptions (
     id_owner INT NOT NULL,
     id_plan INT NOT NULL,
 
+    jumlah_bulan INT NOT NULL DEFAULT 1,
+
     kode_invoice VARCHAR(100) NOT NULL UNIQUE,
 
     tanggal_mulai DATETIME NULL,
@@ -379,16 +381,25 @@ CREATE TABLE subscriptions (
 
     harga DECIMAL(15,2) NOT NULL DEFAULT 0,
 
-    status_langganan ENUM('pending', 'aktif', 'expired', 'dibatalkan') NOT NULL DEFAULT 'pending',
+    status_langganan ENUM(
+        'pending',
+        'aktif',
+        'expired',
+        'dibatalkan'
+    ) NOT NULL DEFAULT 'pending',
 
-    metode_pembayaran ENUM('manual_transfer', 'qris_manual') NOT NULL DEFAULT 'manual_transfer',
+    metode_pembayaran ENUM(
+        'manual_transfer',
+        'qris_manual'
+    ) NOT NULL DEFAULT 'manual_transfer',
 
     bukti_pembayaran VARCHAR(255) NULL,
 
     catatan TEXT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
 
     CONSTRAINT fk_subscriptions_owner
         FOREIGN KEY (id_owner)

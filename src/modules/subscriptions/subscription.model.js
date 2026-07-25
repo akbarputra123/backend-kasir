@@ -1,4 +1,4 @@
-const pool = require("../../config/database")
+const pool = require("../../config/database");
 
 /*
 |--------------------------------------------------------------------------
@@ -24,10 +24,9 @@ const findActivePlans = async () => {
     WHERE status_paket = 'aktif'
     ORDER BY harga ASC
     `
-  )
-
-  return rows
-}
+  );
+  return rows;
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -54,10 +53,9 @@ const findPlanById = async (id_plan) => {
     LIMIT 1
     `,
     [id_plan]
-  )
-
-  return rows[0] || null
-}
+  );
+  return rows[0] || null;
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -77,6 +75,7 @@ const findLatestByOwner = async (id_owner) => {
       p.batas_toko,
       p.batas_user,
       p.batas_produk,
+      s.jumlah_bulan,
       s.kode_invoice,
       s.tanggal_mulai,
       s.tanggal_berakhir,
@@ -95,10 +94,9 @@ const findLatestByOwner = async (id_owner) => {
     LIMIT 1
     `,
     [id_owner]
-  )
-
-  return rows[0] || null
-}
+  );
+  return rows[0] || null;
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -117,6 +115,7 @@ const findActiveByOwner = async (id_owner) => {
       p.batas_toko,
       p.batas_user,
       p.batas_produk,
+      s.jumlah_bulan,
       s.kode_invoice,
       s.tanggal_mulai,
       s.tanggal_berakhir,
@@ -134,10 +133,9 @@ const findActiveByOwner = async (id_owner) => {
     LIMIT 1
     `,
     [id_owner]
-  )
-
-  return rows[0] || null
-}
+  );
+  return rows[0] || null;
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -151,6 +149,7 @@ const findPendingByOwner = async (id_owner) => {
       id_subscription,
       id_owner,
       id_plan,
+      jumlah_bulan,
       kode_invoice,
       harga,
       status_langganan,
@@ -163,10 +162,9 @@ const findPendingByOwner = async (id_owner) => {
     LIMIT 1
     `,
     [id_owner]
-  )
-
-  return rows[0] || null
-}
+  );
+  return rows[0] || null;
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -186,6 +184,7 @@ const findById = async (id_subscription) => {
       p.batas_toko,
       p.batas_user,
       p.batas_produk,
+      s.jumlah_bulan,
       s.kode_invoice,
       s.tanggal_mulai,
       s.tanggal_berakhir,
@@ -203,16 +202,13 @@ const findById = async (id_subscription) => {
     LIMIT 1
     `,
     [id_subscription]
-  )
-
-  return rows[0] || null
-}
+  );
+  return rows[0] || null;
+};
 
 /*
 |--------------------------------------------------------------------------
 | GET OWNER ID BY USER
-|--------------------------------------------------------------------------
-| Untuk admin/kasir, cari owner dari toko user tersebut.
 |--------------------------------------------------------------------------
 */
 const getOwnerIdByUser = async (id_user) => {
@@ -229,20 +225,12 @@ const getOwnerIdByUser = async (id_user) => {
     LIMIT 1
     `,
     [id_user]
-  )
-
-  const user = rows[0] || null
-
-  if (!user) {
-    return null
-  }
-
-  if (user.role === "owner") {
-    return user.id_user
-  }
-
-  return user.id_owner || null
-}
+  );
+  const user = rows[0] || null;
+  if (!user) return null;
+  if (user.role === "owner") return user.id_user;
+  return user.id_owner || null;
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -250,22 +238,29 @@ const getOwnerIdByUser = async (id_user) => {
 |--------------------------------------------------------------------------
 */
 const generateInvoiceCode = async () => {
-  const date = new Date()
-  const yyyy = date.getFullYear()
-  const mm = String(date.getMonth() + 1).padStart(2, "0")
-  const dd = String(date.getDate()).padStart(2, "0")
-  const random = Math.floor(1000 + Math.random() * 9000)
-
-  return `INV-SIOPOS-${yyyy}${mm}${dd}-${random}`
-}
+  const date = new Date();
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const random = Math.floor(1000 + Math.random() * 9000);
+  return `INV-SIOPOS-${yyyy}${mm}${dd}-${random}`;
+};
 
 /*
 |--------------------------------------------------------------------------
-| CREATE SUBSCRIPTION CHECKOUT
+| CREATE SUBSCRIPTION CHECKOUT (dengan jumlah_bulan)
 |--------------------------------------------------------------------------
 */
 const createCheckout = async (data) => {
-  const kodeInvoice = await generateInvoiceCode()
+  const { id_owner, id_plan, jumlah_bulan = 1, metode_pembayaran = "manual_transfer", catatan = null } = data;
+
+  // Ambil data plan untuk menghitung harga total
+  const plan = await findPlanById(id_plan);
+  if (!plan) throw new Error("Plan tidak ditemukan");
+  if (plan.status_paket !== "aktif") throw new Error("Plan tidak aktif");
+
+  const totalHarga = plan.harga * jumlah_bulan;
+  const kodeInvoice = await generateInvoiceCode();
 
   const [result] = await pool.query(
     `
@@ -273,45 +268,39 @@ const createCheckout = async (data) => {
     (
       id_owner,
       id_plan,
+      jumlah_bulan,
       kode_invoice,
       harga,
       status_langganan,
       metode_pembayaran,
       catatan
     )
-    VALUES (?, ?, ?, ?, 'pending', ?, ?)
+    VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
     `,
-    [
-      data.id_owner,
-      data.id_plan,
-      kodeInvoice,
-      data.harga,
-      data.metode_pembayaran || "manual_transfer",
-      data.catatan || null
-    ]
-  )
+    [id_owner, id_plan, jumlah_bulan, kodeInvoice, totalHarga, metode_pembayaran, catatan]
+  );
 
   return {
     id_subscription: result.insertId,
-    id_owner: data.id_owner,
-    id_plan: data.id_plan,
+    id_owner,
+    id_plan,
+    jumlah_bulan,
     kode_invoice: kodeInvoice,
-    harga: data.harga,
+    harga: totalHarga,
     status_langganan: "pending",
-    metode_pembayaran: data.metode_pembayaran || "manual_transfer"
-  }
-}
+    metode_pembayaran,
+  };
+};
 
 /*
 |--------------------------------------------------------------------------
-| ACTIVATE SUBSCRIPTION
+| ACTIVATE SUBSCRIPTION (menggunakan jumlah_bulan untuk durasi)
 |--------------------------------------------------------------------------
 */
 const activateSubscription = async (id_subscription) => {
-  const connection = await pool.getConnection()
-
+  const connection = await pool.getConnection();
   try {
-    await connection.beginTransaction()
+    await connection.beginTransaction();
 
     const [rows] = await connection.query(
       `
@@ -319,6 +308,7 @@ const activateSubscription = async (id_subscription) => {
         s.id_subscription,
         s.id_owner,
         s.id_plan,
+        s.jumlah_bulan,
         s.status_langganan,
         p.durasi_hari
       FROM subscriptions s
@@ -328,21 +318,15 @@ const activateSubscription = async (id_subscription) => {
       FOR UPDATE
       `,
       [id_subscription]
-    )
+    );
 
-    const subscription = rows[0] || null
+    const subscription = rows[0] || null;
+    if (!subscription) throw new Error("Subscription tidak ditemukan");
+    if (subscription.status_langganan === "aktif") throw new Error("Subscription sudah aktif");
+    if (subscription.status_langganan === "dibatalkan") throw new Error("Subscription sudah dibatalkan");
 
-    if (!subscription) {
-      throw new Error("Subscription tidak ditemukan")
-    }
-
-    if (subscription.status_langganan === "aktif") {
-      throw new Error("Subscription sudah aktif")
-    }
-
-    if (subscription.status_langganan === "dibatalkan") {
-      throw new Error("Subscription sudah dibatalkan")
-    }
+    // Hitung total hari dari durasi_hari * jumlah_bulan
+    const totalHari = subscription.durasi_hari * subscription.jumlah_bulan;
 
     await connection.query(
       `
@@ -353,25 +337,33 @@ const activateSubscription = async (id_subscription) => {
         status_langganan = 'aktif'
       WHERE id_subscription = ?
       `,
-      [
-        subscription.durasi_hari,
-        id_subscription
-      ]
-    )
+      [totalHari, id_subscription]
+    );
 
-    await connection.commit()
+    // Expire semua subscription aktif lainnya milik owner yang sama
+    await connection.query(
+      `
+      UPDATE subscriptions
+      SET status_langganan = 'expired'
+      WHERE id_owner = ?
+        AND status_langganan = 'aktif'
+        AND id_subscription != ?
+      `,
+      [subscription.id_owner, id_subscription]
+    );
 
+    await connection.commit();
     return {
       id_subscription: Number(id_subscription),
       status_langganan: "aktif"
-    }
+    };
   } catch (error) {
-    await connection.rollback()
-    throw error
+    await connection.rollback();
+    throw error;
   } finally {
-    connection.release()
+    connection.release();
   }
-}
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -388,20 +380,14 @@ const cancelSubscription = async (id_subscription, catatan = null) => {
     WHERE id_subscription = ?
       AND status_langganan = 'pending'
     `,
-    [
-      catatan || "Subscription dibatalkan",
-      id_subscription
-    ]
-  )
-
-  return result.affectedRows > 0
-}
+    [catatan || "Subscription dibatalkan", id_subscription]
+  );
+  return result.affectedRows > 0;
+};
 
 /*
 |--------------------------------------------------------------------------
 | EXPIRE OLD SUBSCRIPTIONS
-|--------------------------------------------------------------------------
-| Menandai langganan aktif yang sudah lewat tanggal berakhir.
 |--------------------------------------------------------------------------
 */
 const expireOldSubscriptions = async () => {
@@ -412,16 +398,13 @@ const expireOldSubscriptions = async () => {
     WHERE status_langganan = 'aktif'
       AND tanggal_berakhir < NOW()
     `
-  )
-
-  return result.affectedRows
-}
+  );
+  return result.affectedRows;
+};
 
 /*
 |--------------------------------------------------------------------------
 | EXPIRE ALL ACTIVE SUBSCRIPTIONS FOR OWNER (EXCEPT ONE)
-|--------------------------------------------------------------------------
-| Digunakan saat aktivasi subscription baru untuk menonaktifkan yang lama
 |--------------------------------------------------------------------------
 */
 const expireAllActiveSubscriptionsForOwner = async (id_owner, excludeId) => {
@@ -434,9 +417,152 @@ const expireAllActiveSubscriptionsForOwner = async (id_owner, excludeId) => {
       AND id_subscription != ?
     `,
     [id_owner, excludeId]
-  )
-  return result.affectedRows
-}
+  );
+  return result.affectedRows;
+};
+
+/*
+|--------------------------------------------------------------------------
+| UPGRADE SUBSCRIPTION (ganti plan dan jumlah bulan, mulai dari sekarang)
+|--------------------------------------------------------------------------
+*/
+const upgradeSubscription = async (id_subscription, newPlanId, newJumlahBulan) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // Ambil data subscription dan plan baru
+    const [subRows] = await connection.query(
+      `
+      SELECT s.id_subscription, s.id_owner, s.status_langganan
+      FROM subscriptions s
+      WHERE s.id_subscription = ?
+      LIMIT 1
+      FOR UPDATE
+      `,
+      [id_subscription]
+    );
+    const subscription = subRows[0] || null;
+    if (!subscription) throw new Error("Subscription tidak ditemukan");
+    if (subscription.status_langganan !== "aktif") throw new Error("Hanya subscription aktif yang bisa di-upgrade");
+
+    const plan = await findPlanById(newPlanId);
+    if (!plan) throw new Error("Plan baru tidak ditemukan");
+    if (plan.status_paket !== "aktif") throw new Error("Plan baru tidak aktif");
+
+    const totalHari = plan.durasi_hari * newJumlahBulan;
+    const newHarga = plan.harga * newJumlahBulan;
+
+    // Update subscription: plan, jumlah_bulan, harga, dan reset tanggal mulai & berakhir
+    await connection.query(
+      `
+      UPDATE subscriptions
+      SET
+        id_plan = ?,
+        jumlah_bulan = ?,
+        harga = ?,
+        tanggal_mulai = NOW(),
+        tanggal_berakhir = DATE_ADD(NOW(), INTERVAL ? DAY),
+        status_langganan = 'aktif'
+      WHERE id_subscription = ?
+      `,
+      [newPlanId, newJumlahBulan, newHarga, totalHari, id_subscription]
+    );
+
+    // Expire subscription aktif lain milik owner yang sama
+    await connection.query(
+      `
+      UPDATE subscriptions
+      SET status_langganan = 'expired'
+      WHERE id_owner = ?
+        AND status_langganan = 'aktif'
+        AND id_subscription != ?
+      `,
+      [subscription.id_owner, id_subscription]
+    );
+
+    await connection.commit();
+    return {
+      id_subscription: Number(id_subscription),
+      id_plan: newPlanId,
+      jumlah_bulan: newJumlahBulan,
+      harga: newHarga,
+      status_langganan: "aktif"
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+/*
+|--------------------------------------------------------------------------
+| EXTEND SUBSCRIPTION (perpanjang masa aktif dengan jumlah bulan tambahan)
+|--------------------------------------------------------------------------
+*/
+const extendSubscription = async (id_subscription, additionalMonths, catatan = null) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // Ambil data subscription dan plan yang terkait
+    const [rows] = await connection.query(
+      `
+      SELECT
+        s.id_subscription,
+        s.id_owner,
+        s.id_plan,
+        s.jumlah_bulan,
+        s.status_langganan,
+        s.tanggal_berakhir,
+        p.durasi_hari,
+        p.harga AS harga_plan
+      FROM subscriptions s
+      JOIN subscription_plans p ON s.id_plan = p.id_plan
+      WHERE s.id_subscription = ?
+      LIMIT 1
+      FOR UPDATE
+      `,
+      [id_subscription]
+    );
+    const subscription = rows[0] || null;
+    if (!subscription) throw new Error("Subscription tidak ditemukan");
+    if (subscription.status_langganan !== "aktif") throw new Error("Hanya subscription aktif yang dapat diperpanjang");
+    if (subscription.tanggal_berakhir < new Date()) throw new Error("Subscription sudah expired, tidak bisa diperpanjang");
+
+    const tambahanHari = subscription.durasi_hari * additionalMonths;
+    const biayaTambahan = subscription.harga_plan * additionalMonths;
+
+    // Update tanggal_berakhir dan jumlah_bulan (akumulasi)
+    await connection.query(
+      `
+      UPDATE subscriptions
+      SET
+        tanggal_berakhir = DATE_ADD(tanggal_berakhir, INTERVAL ? DAY),
+        jumlah_bulan = jumlah_bulan + ?,
+        harga = harga + ?,
+        catatan = CONCAT(IFNULL(catatan, ''), ' Perpanjangan ', ?, ' bulan.')
+      WHERE id_subscription = ?
+      `,
+      [tambahanHari, additionalMonths, biayaTambahan, additionalMonths, id_subscription]
+    );
+
+    await connection.commit();
+    return {
+      id_subscription: Number(id_subscription),
+      tambahan_bulan: additionalMonths,
+      biaya_tambahan: biayaTambahan,
+      tanggal_berakhir_baru: (await findById(id_subscription)).tanggal_berakhir
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
 
 module.exports = {
   findActivePlans,
@@ -450,5 +576,7 @@ module.exports = {
   activateSubscription,
   cancelSubscription,
   expireOldSubscriptions,
-  expireAllActiveSubscriptionsForOwner
-}
+  expireAllActiveSubscriptionsForOwner,
+  upgradeSubscription,   // baru
+  extendSubscription     // baru
+};
