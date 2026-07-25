@@ -264,16 +264,12 @@ if (product.status_produk !== "aktif") {
 }
 
 // =====================================================
-// CEK STOK BERDASARKAN JENIS BISNIS
-//
-// id_business_category
-// 1 = Retail        -> menggunakan stok
-// 2 = Coffee Shop   -> tidak menggunakan stok
-// selain itu        -> menggunakan stok
+// CEK STOK
+// Hanya Retail (id_business_category = 1)
 // =====================================================
 const businessCategory = Number(storeData.id_business_category)
 
-if (businessCategory !== 2) {
+if (businessCategory === 1) {
   if (Number(product.stok) < Number(item.qty)) {
     throw new Error(
       `Stok produk ${product.nama_produk} tidak mencukupi`
