@@ -572,11 +572,12 @@ const create = async (data) => {
     */
     const [storeRows] = await connection.query(
       `
-      SELECT
-        s.id_store,
-        s.id_owner,
-        s.nama_toko,
-        s.status_toko
+     SELECT
+    s.id_store,
+    s.id_owner,
+    s.id_business_category,
+    s.nama_toko,
+    s.status_toko
       FROM stores s
       WHERE s.id_store = ?
       LIMIT 1

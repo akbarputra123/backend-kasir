@@ -312,7 +312,14 @@ const normalizeProductData = (
 | VALIDATE PRODUCT FIELDS
 |--------------------------------------------------------------------------
 */
-const validateProductFields = (product) => {
+const validateProductFields = (
+  product,
+  businessCategory
+) => {
+  // ==========================================
+  // VALIDASI UMUM (RETAIL & COFFEE)
+  // ==========================================
+
   if (!product.nama_produk) {
     throw createServiceError(
       "Nama produk wajib diisi",
@@ -345,6 +352,73 @@ const validateProductFields = (product) => {
     product.harga_jual,
     "Harga jual"
   )
+
+  // ==========================================
+  // KHUSUS RETAIL
+  // id_business_category = 1
+  // ==========================================
+
+  if (businessCategory === 1) {
+
+    if (!product.kode_produk) {
+      throw createServiceError(
+        "Kode produk wajib diisi",
+        422,
+        "PRODUCT_CODE_REQUIRED"
+      )
+    }
+
+    if (
+      product.kode_produk.length > 100
+    ) {
+      throw createServiceError(
+        "Kode produk maksimal 100 karakter",
+        422,
+        "PRODUCT_CODE_TOO_LONG"
+      )
+    }
+
+    if (
+      product.barcode &&
+      product.barcode.length > 100
+    ) {
+      throw createServiceError(
+        "Barcode maksimal 100 karakter",
+        422,
+        "BARCODE_TOO_LONG"
+      )
+    }
+
+    validateNumberMinZero(
+      product.harga_beli,
+      "Harga beli"
+    )
+
+    validateIntegerMinZero(
+      product.stok,
+      "Stok"
+    )
+
+    validateIntegerMinZero(
+      product.stok_minimum,
+      "Stok minimum"
+    )
+  }
+
+  // ==========================================
+  // KHUSUS COFFEE
+  // id_business_category = 2
+  // ==========================================
+
+  if (businessCategory === 2) {
+    // Tidak ada validasi tambahan.
+    // Coffee tidak menggunakan:
+    // - kode_produk
+    // - barcode
+    // - harga_beli
+    // - stok
+    // - stok_minimum
+  }
 }
 
 /*
@@ -545,9 +619,12 @@ const createProduct = async (
   const product =
     normalizeProductData(data)
 
-  validateProductFields(product)
+  let finalStoreId =
+    product.id_store
 
-  let finalStoreId = product.id_store
+  // =====================================
+  // OWNER
+  // =====================================
 
   if (currentUser.role === "owner") {
     if (!finalStoreId) {
@@ -559,6 +636,10 @@ const createProduct = async (
     }
   }
 
+  // =====================================
+  // ADMIN
+  // =====================================
+
   if (currentUser.role === "admin") {
     if (!currentUser.id_store) {
       throw createServiceError(
@@ -568,76 +649,110 @@ const createProduct = async (
       )
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Abaikan id_store dari body untuk admin.
-    |--------------------------------------------------------------------------
-    */
     finalStoreId =
       Number(currentUser.id_store)
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | CREATE IN TRANSACTION
-  |--------------------------------------------------------------------------
-  | Model akan memeriksa:
-  |
-  | - akses toko;
-  | - status toko;
-  | - akun owner;
-  | - langganan aktif;
-  | - batas produk;
-  | - kategori;
-  | - diskon;
-  | - kode produk;
-  | - barcode.
-  |--------------------------------------------------------------------------
-  */
+  // =====================================
+  // STORE
+  // =====================================
+
+  const store =
+    await productModel.findStoreById(
+      finalStoreId
+    )
+
+  if (!store) {
+    throw createServiceError(
+      "Toko tidak ditemukan",
+      404,
+      "STORE_NOT_FOUND"
+    )
+  }
+
+  // =====================================
+  // VALIDASI BERDASARKAN JENIS BISNIS
+  // =====================================
+
+  validateProductFields(
+    product,
+    store.id_business_category
+  )
+
+  // =====================================
+  // CREATE
+  // =====================================
+
   return await productModel.create({
-    actor_id: currentUser.id_user,
-    actor_role: currentUser.role,
+    actor_id:
+      currentUser.id_user,
+
+    actor_role:
+      currentUser.role,
+
     actor_store_id:
       currentUser.id_store || null,
 
-    id_store: finalStoreId,
+    id_store:
+      finalStoreId,
+
     id_category:
       product.id_category || null,
+
     id_discount:
       product.id_discount || null,
 
+    // Retail only
     kode_produk:
-      product.kode_produk,
+      store.id_business_category === 1
+        ? product.kode_produk
+        : null,
 
     barcode:
-      product.barcode || null,
+      store.id_business_category === 1
+        ? product.barcode || null
+        : null,
 
+    // Shared
     nama_produk:
       product.nama_produk,
 
     deskripsi:
       product.deskripsi || null,
 
+    // Retail only
     harga_beli:
-      product.harga_beli,
+      store.id_business_category === 1
+        ? product.harga_beli
+        : null,
 
+    // Shared
     harga_jual:
       product.harga_jual,
 
+    // Retail only
     stok:
-      product.stok,
+      store.id_business_category === 1
+        ? product.stok
+        : null,
 
     stok_minimum:
-      product.stok_minimum,
+      store.id_business_category === 1
+        ? product.stok_minimum
+        : null,
 
     satuan:
-      product.satuan || "pcs",
+      store.id_business_category === 1
+        ? product.satuan || "pcs"
+        : null,
 
+    // Shared
     foto:
       product.foto || null,
 
     status_produk:
-      product.status_produk || "aktif"
+      product.status_produk ||
+      "aktif"
   })
 }
 
@@ -690,11 +805,13 @@ const updateProduct = async (
   const product =
     normalizeProductData(data)
 
-  validateProductFields(product)
-
   let finalStoreId =
     product.id_store ||
     existingProduct.id_store
+
+  // =====================================
+  // OWNER
+  // =====================================
 
   if (currentUser.role === "owner") {
     if (
@@ -716,13 +833,13 @@ const updateProduct = async (
       )
     }
 
-    const store =
+    const ownerStore =
       await productModel.findStoreByIdAndOwner(
         product.id_store,
         currentUser.id_user
       )
 
-    if (!store) {
+    if (!ownerStore) {
       throw createServiceError(
         "Toko tidak ditemukan atau bukan milik owner ini",
         404,
@@ -730,7 +847,9 @@ const updateProduct = async (
       )
     }
 
-    if (store.status_toko !== "aktif") {
+    if (
+      ownerStore.status_toko !== "aktif"
+    ) {
       throw createServiceError(
         "Toko sedang nonaktif",
         403,
@@ -740,6 +859,10 @@ const updateProduct = async (
 
     finalStoreId = product.id_store
   }
+
+  // =====================================
+  // ADMIN
+  // =====================================
 
   if (currentUser.role === "admin") {
     if (!currentUser.id_store) {
@@ -765,7 +888,43 @@ const updateProduct = async (
       Number(currentUser.id_store)
   }
 
-  if (product.id_category) {
+  // =====================================
+  // BUSINESS CATEGORY
+  // =====================================
+
+  const store =
+    await productModel.findStoreById(
+      finalStoreId
+    )
+
+  if (!store) {
+    throw createServiceError(
+      "Toko tidak ditemukan",
+      404,
+      "STORE_NOT_FOUND"
+    )
+  }
+
+  validateProductFields(
+    product,
+    store.id_business_category
+  )
+
+  // =====================================
+  // RETAIL ONLY
+  // =====================================
+
+  if (
+    store.id_business_category === 1
+  ) {
+    if (!product.id_category) {
+      throw createServiceError(
+        "Kategori wajib dipilih",
+        422,
+        "CATEGORY_REQUIRED"
+      )
+    }
+
     const category =
       await productModel.findCategoryByIdAndStore(
         product.id_category,
@@ -781,7 +940,8 @@ const updateProduct = async (
     }
 
     if (
-      category.status_kategori !== "aktif"
+      category.status_kategori !==
+      "aktif"
     ) {
       throw createServiceError(
         "Kategori sedang nonaktif",
@@ -789,50 +949,59 @@ const updateProduct = async (
         "CATEGORY_INACTIVE"
       )
     }
+
+    const codeExists =
+      await productModel.findByKodeAndStore(
+        product.kode_produk,
+        finalStoreId
+      )
+
+    if (
+      codeExists &&
+      Number(codeExists.id_product) !==
+        Number(id_product)
+    ) {
+      throw createServiceError(
+        "Kode produk sudah digunakan pada toko ini",
+        409,
+        "PRODUCT_CODE_ALREADY_EXISTS"
+      )
+    }
+
+    if (product.barcode) {
+      const barcodeExists =
+        await productModel.findByBarcodeAndStore(
+          product.barcode,
+          finalStoreId
+        )
+
+      if (
+        barcodeExists &&
+        Number(
+          barcodeExists.id_product
+        ) !== Number(id_product)
+      ) {
+        throw createServiceError(
+          "Barcode sudah digunakan pada toko ini",
+          409,
+          "PRODUCT_BARCODE_ALREADY_EXISTS"
+        )
+      }
+    }
   }
+
+  // =====================================
+  // DISCOUNT
+  // =====================================
 
   await validateDiscount(
     product.id_discount,
     finalStoreId
   )
 
-  const codeExists =
-    await productModel.findByKodeAndStore(
-      product.kode_produk,
-      finalStoreId
-    )
-
-  if (
-    codeExists &&
-    Number(codeExists.id_product) !==
-      Number(id_product)
-  ) {
-    throw createServiceError(
-      "Kode produk sudah digunakan pada toko ini",
-      409,
-      "PRODUCT_CODE_ALREADY_EXISTS"
-    )
-  }
-
-  if (product.barcode) {
-    const barcodeExists =
-      await productModel.findByBarcodeAndStore(
-        product.barcode,
-        finalStoreId
-      )
-
-    if (
-      barcodeExists &&
-      Number(barcodeExists.id_product) !==
-        Number(id_product)
-    ) {
-      throw createServiceError(
-        "Barcode sudah digunakan pada toko ini",
-        409,
-        "PRODUCT_BARCODE_ALREADY_EXISTS"
-      )
-    }
-  }
+  // =====================================
+  // UPDATE
+  // =====================================
 
   const updated =
     await productModel.update(
@@ -847,10 +1016,14 @@ const updateProduct = async (
           product.id_discount || null,
 
         kode_produk:
-          product.kode_produk,
+          store.id_business_category === 1
+            ? product.kode_produk
+            : null,
 
         barcode:
-          product.barcode || null,
+          store.id_business_category === 1
+            ? product.barcode || null
+            : null,
 
         nama_produk:
           product.nama_produk,
@@ -859,19 +1032,27 @@ const updateProduct = async (
           product.deskripsi || null,
 
         harga_beli:
-          product.harga_beli,
+          store.id_business_category === 1
+            ? product.harga_beli
+            : null,
 
         harga_jual:
           product.harga_jual,
 
         stok:
-          product.stok,
+          store.id_business_category === 1
+            ? product.stok
+            : null,
 
         stok_minimum:
-          product.stok_minimum,
+          store.id_business_category === 1
+            ? product.stok_minimum
+            : null,
 
         satuan:
-          product.satuan || "pcs",
+          store.id_business_category === 1
+            ? product.satuan || "pcs"
+            : null,
 
         foto:
           product.foto ||
