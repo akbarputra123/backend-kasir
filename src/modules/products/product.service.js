@@ -312,41 +312,12 @@ const normalizeProductData = (
 | VALIDATE PRODUCT FIELDS
 |--------------------------------------------------------------------------
 */
-const validateProductFields = (
-  product
-) => {
-  if (!product.kode_produk) {
-    throw createServiceError(
-      "Kode produk wajib diisi",
-      422,
-      "PRODUCT_CODE_REQUIRED"
-    )
-  }
-
+const validateProductFields = (product) => {
   if (!product.nama_produk) {
     throw createServiceError(
       "Nama produk wajib diisi",
       422,
       "PRODUCT_NAME_REQUIRED"
-    )
-  }
-
-  if (product.kode_produk.length > 100) {
-    throw createServiceError(
-      "Kode produk maksimal 100 karakter",
-      422,
-      "PRODUCT_CODE_TOO_LONG"
-    )
-  }
-
-  if (
-    product.barcode &&
-    product.barcode.length > 100
-  ) {
-    throw createServiceError(
-      "Barcode maksimal 100 karakter",
-      422,
-      "BARCODE_TOO_LONG"
     )
   }
 
@@ -371,23 +342,8 @@ const validateProductFields = (
   }
 
   validateNumberMinZero(
-    product.harga_beli,
-    "Harga beli"
-  )
-
-  validateNumberMinZero(
     product.harga_jual,
     "Harga jual"
-  )
-
-  validateIntegerMinZero(
-    product.stok,
-    "Stok"
-  )
-
-  validateIntegerMinZero(
-    product.stok_minimum,
-    "Stok minimum"
   )
 }
 
