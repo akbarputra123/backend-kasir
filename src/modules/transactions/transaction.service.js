@@ -239,8 +239,9 @@ const createTransaction = async (data, currentUser) => {
     if (Number(item.qty) <= 0) {
       throw new Error("Qty produk harus lebih dari 0")
     }
+const BUSINESS_CATEGORY_COFFEE_SHOP = 2
 
-   const product = await productModel.findById(item.id_product)
+const product = await productModel.findById(item.id_product)
 
 if (!product) {
   throw new Error("Produk tidak ditemukan")
@@ -267,11 +268,11 @@ if (product.status_produk !== "aktif") {
 }
 
 // =====================================================
-// CEK STOK HANYA UNTUK BISNIS SELAIN COFFEE SHOP
-// id_business_category = 1 => Coffee Shop
+// CEK STOK
+// Coffee Shop (id = 2) tidak menggunakan stok
 // =====================================================
 const useStock =
-  Number(storeData.id_business_category) !== 1
+  Number(storeData.id_business_category) !== BUSINESS_CATEGORY_COFFEE_SHOP
 
 if (
   useStock &&
