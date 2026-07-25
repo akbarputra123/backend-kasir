@@ -426,15 +426,32 @@ const expireAllActiveSubscriptionsForOwner = async (id_owner, excludeId) => {
 | UPGRADE SUBSCRIPTION (ganti plan dan jumlah bulan, mulai dari sekarang)
 |--------------------------------------------------------------------------
 */
-const upgradeSubscription = async (id_subscription, newPlanId, newJumlahBulan) => {
+/*
+|--------------------------------------------------------------------------
+| UPGRADE SUBSCRIPTION
+|--------------------------------------------------------------------------
+| Membuat invoice upgrade baru dengan status pending.
+| Subscription lama tetap aktif sampai invoice di-approve.
+|--------------------------------------------------------------------------
+*/
+const upgradeSubscription = async (
+  id_subscription,
+  newPlanId,
+  newJumlahBulan
+) => {
   const connection = await pool.getConnection();
+
   try {
     await connection.beginTransaction();
 
-    // Ambil data subscription dan plan baru
+    // Ambil subscription lama
     const [subRows] = await connection.query(
       `
-      SELECT s.id_subscription, s.id_owner, s.status_langganan
+      SELECT
+        s.id_subscription,
+        s.id_owner,
+        s.id_plan,
+        s.status_langganan
       FROM subscriptions s
       WHERE s.id_subscription = ?
       LIMIT 1
@@ -442,52 +459,82 @@ const upgradeSubscription = async (id_subscription, newPlanId, newJumlahBulan) =
       `,
       [id_subscription]
     );
-    const subscription = subRows[0] || null;
-    if (!subscription) throw new Error("Subscription tidak ditemukan");
-    if (subscription.status_langganan !== "aktif") throw new Error("Hanya subscription aktif yang bisa di-upgrade");
 
-    const plan = await findPlanById(newPlanId);
-    if (!plan) throw new Error("Plan baru tidak ditemukan");
-    if (plan.status_paket !== "aktif") throw new Error("Plan baru tidak aktif");
+    const subscription = subRows[0];
 
-    const totalHari = plan.durasi_hari * newJumlahBulan;
-    const newHarga = plan.harga * newJumlahBulan;
+    if (!subscription) {
+      throw new Error("Subscription tidak ditemukan");
+    }
 
-    // Update subscription: plan, jumlah_bulan, harga, dan reset tanggal mulai & berakhir
-    await connection.query(
+    if (subscription.status_langganan !== "aktif") {
+      throw new Error("Hanya subscription aktif yang bisa di-upgrade");
+    }
+
+    // Ambil plan lama
+    const oldPlan = await findPlanById(subscription.id_plan);
+
+    // Ambil plan baru
+    const newPlan = await findPlanById(newPlanId);
+
+    if (!newPlan) {
+      throw new Error("Plan baru tidak ditemukan");
+    }
+
+    if (newPlan.status_paket !== "aktif") {
+      throw new Error("Plan baru tidak aktif");
+    }
+
+    // Tidak boleh downgrade
+    if (newPlan.harga <= oldPlan.harga) {
+      throw new Error(
+        "Upgrade hanya dapat dilakukan ke paket dengan harga lebih tinggi"
+      );
+    }
+
+    const totalHarga = newPlan.harga * newJumlahBulan;
+    const kodeInvoice = await generateInvoiceCode();
+
+    // Buat subscription baru (pending)
+    const [result] = await connection.query(
       `
-      UPDATE subscriptions
-      SET
-        id_plan = ?,
-        jumlah_bulan = ?,
-        harga = ?,
-        tanggal_mulai = NOW(),
-        tanggal_berakhir = DATE_ADD(NOW(), INTERVAL ? DAY),
-        status_langganan = 'aktif'
-      WHERE id_subscription = ?
+      INSERT INTO subscriptions
+      (
+        id_owner,
+        id_plan,
+        jumlah_bulan,
+        kode_invoice,
+        harga,
+        status_langganan,
+        metode_pembayaran,
+        catatan
+      )
+      VALUES
+      (
+        ?, ?, ?, ?, ?, 'pending', 'manual_transfer', ?
+      )
       `,
-      [newPlanId, newJumlahBulan, newHarga, totalHari, id_subscription]
-    );
-
-    // Expire subscription aktif lain milik owner yang sama
-    await connection.query(
-      `
-      UPDATE subscriptions
-      SET status_langganan = 'expired'
-      WHERE id_owner = ?
-        AND status_langganan = 'aktif'
-        AND id_subscription != ?
-      `,
-      [subscription.id_owner, id_subscription]
+      [
+        subscription.id_owner,
+        newPlanId,
+        newJumlahBulan,
+        kodeInvoice,
+        totalHarga,
+        `Upgrade dari paket ${oldPlan.nama_paket}`
+      ]
     );
 
     await connection.commit();
+
     return {
-      id_subscription: Number(id_subscription),
+      id_subscription: result.insertId,
+      id_owner: subscription.id_owner,
       id_plan: newPlanId,
       jumlah_bulan: newJumlahBulan,
-      harga: newHarga,
-      status_langganan: "aktif"
+      harga: totalHarga,
+      kode_invoice: kodeInvoice,
+      status_langganan: "pending",
+      metode_pembayaran: "manual_transfer",
+      is_upgrade: true
     };
   } catch (error) {
     await connection.rollback();
