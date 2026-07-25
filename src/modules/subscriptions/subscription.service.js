@@ -15,10 +15,23 @@ const getPlans = async () => {
 |--------------------------------------------------------------------------
 | GET OWNER ID FROM CURRENT USER
 |--------------------------------------------------------------------------
+| Untuk super_admin, kita gunakan id_user langsung sebagai owner (jika dia memiliki subscription).
+| Untuk role lain, cari owner dari relasi toko.
+|--------------------------------------------------------------------------
 */
 const getOwnerIdFromCurrentUser = async (currentUser) => {
   if (!currentUser) throw new Error("User tidak valid")
-  if (currentUser.role === "owner") return currentUser.id_user
+
+  // Super_admin dianggap sebagai "owner" untuk subscription pribadinya
+  if (currentUser.role === "super_admin") {
+    return currentUser.id_user
+  }
+
+  if (currentUser.role === "owner") {
+    return currentUser.id_user
+  }
+
+  // Admin/kasir cari owner dari store
   const idOwner = await subscriptionModel.getOwnerIdByUser(currentUser.id_user)
   if (!idOwner) throw new Error("Owner langganan tidak ditemukan")
   return idOwner
@@ -28,13 +41,15 @@ const getOwnerIdFromCurrentUser = async (currentUser) => {
 |--------------------------------------------------------------------------
 | GET MY SUBSCRIPTION
 |--------------------------------------------------------------------------
+| Super_admin dan owner bisa langsung melihat subscription berdasarkan id_user.
+| Untuk admin/kasir, dicari melalui toko.
+|--------------------------------------------------------------------------
 */
 const getMySubscription = async (currentUser) => {
   const idOwner = await getOwnerIdFromCurrentUser(currentUser)
   await subscriptionModel.expireOldSubscriptions()
   const activeSubscription = await subscriptionModel.findActiveByOwner(idOwner)
   const latestSubscription = await subscriptionModel.findLatestByOwner(idOwner)
-  // Tambahkan informasi jumlah_bulan pada active dan latest
   return {
     is_active: !!activeSubscription,
     active_subscription: activeSubscription,
@@ -44,7 +59,9 @@ const getMySubscription = async (currentUser) => {
 
 /*
 |--------------------------------------------------------------------------
-| CHECKOUT SUBSCRIPTION (DENGAN DUKUNGAN JUMLAH_BULAN DAN UPGRADE)
+| CHECKOUT SUBSCRIPTION (HANYA OWNER)
+|--------------------------------------------------------------------------
+| Super_admin tidak diperbolehkan checkout untuk dirinya sendiri, hanya owner.
 |--------------------------------------------------------------------------
 */
 const checkoutSubscription = async (data, currentUser) => {
@@ -65,25 +82,17 @@ const checkoutSubscription = async (data, currentUser) => {
   if (!plan) throw new Error("Paket langganan tidak ditemukan")
   if (plan.status_paket !== "aktif") throw new Error("Paket langganan sedang nonaktif")
 
-  // Hitung total harga
   const totalHarga = plan.harga * jumlah_bulan
 
   // Cek subscription aktif
   const activeSubscription = await subscriptionModel.findActiveByOwner(currentUser.id_user)
 
-  // Jika ada subscription aktif, periksa apakah ini upgrade ke yang lebih mahal
   if (activeSubscription) {
     const activePlan = await subscriptionModel.findPlanById(activeSubscription.id_plan)
     if (!activePlan) throw new Error("Paket aktif tidak ditemukan")
-    // Hanya izinkan upgrade jika harga baru > harga lama (atau bisa juga jika plan berbeda)
-    // Kita bisa memilih: jika plan sama, maka ini perpanjangan, tetapi kita punya endpoint tersendiri untuk perpanjangan.
-    // Untuk checkout, kita anggap sebagai pembelian baru. Jika ada aktif, kita anggap upgrade.
-    // Tapi kita izinkan upgrade ke plan yang lebih tinggi (harga >), atau ke plan yang sama? Lebih baik kita batasi upgrade ke plan yang lebih tinggi.
-    // Namun user mungkin ingin membeli paket yang sama untuk perpanjang, tapi kita punya extend, jadi di checkout kita tolak jika plan sama atau lebih rendah.
     if (plan.harga <= activePlan.harga) {
       throw new Error("Anda sudah memiliki langganan aktif. Untuk membeli paket baru, pilih paket yang lebih tinggi (upgrade) atau gunakan fitur perpanjangan.")
     }
-    // Lolos: ini upgrade
   }
 
   // Cek pending invoice
@@ -92,12 +101,11 @@ const checkoutSubscription = async (data, currentUser) => {
     throw new Error("Anda masih memiliki invoice langganan yang pending")
   }
 
-  // Buat subscription baru dengan jumlah_bulan
   const subscription = await subscriptionModel.createCheckout({
     id_owner: currentUser.id_user,
     id_plan,
     jumlah_bulan,
-    harga: totalHarga, // model akan menghitung sendiri? Di createCheckout kita passing harga total, tapi model juga menghitung ulang? Lebih baik kita lewatkan totalHarga, dan model menyimpannya.
+    harga: totalHarga,
     metode_pembayaran: metode_pembayaran || "manual_transfer",
     catatan: catatan || (activeSubscription ? `Upgrade dari paket ${activeSubscription.nama_paket}` : null)
   })
@@ -117,7 +125,7 @@ const checkoutSubscription = async (data, currentUser) => {
       nominal: Number(totalHarga),
       kode_invoice: subscription.kode_invoice
     },
-    is_upgrade: !!activeSubscription   // tambahkan flag
+    is_upgrade: !!activeSubscription
   }
 }
 
@@ -125,20 +133,31 @@ const checkoutSubscription = async (data, currentUser) => {
 |--------------------------------------------------------------------------
 | ACTIVATE SUBSCRIPTION (DENGAN EXPIRE YANG LAMA)
 |--------------------------------------------------------------------------
+| Diperbaiki: mengizinkan super_admin dan owner.
+| Super_admin tidak perlu cek kepemilikan.
+| Owner tetap harus memiliki subscription tersebut.
+|--------------------------------------------------------------------------
 */
 const activateSubscription = async (id_subscription, currentUser) => {
-  if (!currentUser || currentUser.role !== "owner") {
-    throw new Error("Untuk saat ini aktivasi hanya bisa dilakukan oleh owner saat testing")
+  // 1. Validasi role
+  if (!currentUser) throw new Error("User tidak valid")
+  if (currentUser.role !== "owner" && currentUser.role !== "super_admin") {
+    throw new Error("Hanya owner atau super_admin yang dapat mengaktifkan langganan")
   }
   if (!id_subscription) throw new Error("ID subscription wajib diisi")
 
+  // 2. Ambil data subscription
   const subscription = await subscriptionModel.findById(id_subscription)
   if (!subscription) throw new Error("Subscription tidak ditemukan")
-  if (Number(subscription.id_owner) !== Number(currentUser.id_user)) {
-    throw new Error("Anda tidak memiliki akses ke subscription ini")
+
+  // 3. Jika bukan super_admin, cek kepemilikan
+  if (currentUser.role !== "super_admin") {
+    if (Number(subscription.id_owner) !== Number(currentUser.id_user)) {
+      throw new Error("Anda tidak memiliki akses ke subscription ini")
+    }
   }
 
-  // Aktivasi subscription baru (di dalam model sudah menonaktifkan yang lain)
+  // 4. Aktivasi subscription (model akan menonaktifkan yang lain)
   const result = await subscriptionModel.activateSubscription(id_subscription)
   return await subscriptionModel.findById(result.id_subscription)
 }
@@ -146,6 +165,10 @@ const activateSubscription = async (id_subscription, currentUser) => {
 /*
 |--------------------------------------------------------------------------
 | CANCEL SUBSCRIPTION
+|--------------------------------------------------------------------------
+| Hanya owner yang bisa membatalkan invoice miliknya sendiri.
+| Super_admin tidak diperlukan untuk fitur ini, tapi jika ingin, bisa ditambahkan.
+| Untuk saat ini tetap owner.
 |--------------------------------------------------------------------------
 */
 const cancelSubscription = async (id_subscription, data, currentUser) => {
@@ -177,7 +200,9 @@ const cancelSubscription = async (id_subscription, data, currentUser) => {
 
 /*
 |--------------------------------------------------------------------------
-| UPGRADE SUBSCRIPTION (GANTI PLAN DAN JUMLAH BULAN, RESET TANGGAL)
+| UPGRADE SUBSCRIPTION
+|--------------------------------------------------------------------------
+| Hanya owner. Super_admin tidak perlu, tapi jika ingin bisa ditambahkan.
 |--------------------------------------------------------------------------
 */
 const upgradeSubscription = async (id_subscription, data, currentUser) => {
@@ -197,18 +222,15 @@ const upgradeSubscription = async (id_subscription, data, currentUser) => {
     throw new Error("Hanya subscription aktif yang dapat di-upgrade")
   }
 
-  // Cek plan baru
   const plan = await subscriptionModel.findPlanById(new_plan_id)
   if (!plan) throw new Error("Paket baru tidak ditemukan")
   if (plan.status_paket !== "aktif") throw new Error("Paket baru tidak aktif")
 
-  // Opsional: pastikan plan baru lebih tinggi (harga >)
   const currentPlan = await subscriptionModel.findPlanById(subscription.id_plan)
   if (plan.harga <= currentPlan.harga) {
     throw new Error("Upgrade hanya bisa ke paket dengan harga lebih tinggi")
   }
 
-  // Lakukan upgrade di model
   const result = await subscriptionModel.upgradeSubscription(
     id_subscription,
     new_plan_id,
@@ -219,7 +241,9 @@ const upgradeSubscription = async (id_subscription, data, currentUser) => {
 
 /*
 |--------------------------------------------------------------------------
-| EXTEND SUBSCRIPTION (TAMBAH BULAN KE MASA AKTIF)
+| EXTEND SUBSCRIPTION
+|--------------------------------------------------------------------------
+| Hanya owner.
 |--------------------------------------------------------------------------
 */
 const extendSubscription = async (id_subscription, data, currentUser) => {
@@ -238,7 +262,6 @@ const extendSubscription = async (id_subscription, data, currentUser) => {
     throw new Error("Hanya subscription aktif yang dapat diperpanjang")
   }
 
-  // Cek apakah subscription sudah expired? Model akan menangani
   const result = await subscriptionModel.extendSubscription(
     id_subscription,
     additional_months,
