@@ -333,6 +333,7 @@ const activateSubscription = async (id_subscription) => {
         s.id_owner,
         s.id_plan,
         s.jumlah_bulan,
+        s.harga,
         s.status_langganan,
         s.jenis,
         s.parent_subscription,
@@ -364,32 +365,40 @@ const activateSubscription = async (id_subscription) => {
     const totalHari =
       subscription.durasi_hari * subscription.jumlah_bulan;
 
-    // ===============================
+    // ======================================================
     // EXTEND
-    // ===============================
+    // ======================================================
     if (subscription.jenis === "extend") {
 
+      // Tambahkan masa aktif, bulan, dan harga
       await connection.query(
         `
         UPDATE subscriptions
         SET
-          tanggal_berakhir =
-            DATE_ADD(tanggal_berakhir, INTERVAL ? DAY),
-          jumlah_bulan =
-            jumlah_bulan + ?
+          tanggal_berakhir = DATE_ADD(
+            tanggal_berakhir,
+            INTERVAL ? DAY
+          ),
+          jumlah_bulan = jumlah_bulan + ?,
+          harga = harga + ?
         WHERE id_subscription = ?
         `,
         [
           totalHari,
           subscription.jumlah_bulan,
+          subscription.harga,
           subscription.parent_subscription
         ]
       );
 
+      // Tandai invoice extend telah selesai diproses
       await connection.query(
         `
         UPDATE subscriptions
-        SET status_langganan = 'aktif'
+        SET
+          status_langganan = 'aktif',
+          tanggal_mulai = NOW(),
+          tanggal_berakhir = NOW()
         WHERE id_subscription = ?
         `,
         [id_subscription]
@@ -404,9 +413,9 @@ const activateSubscription = async (id_subscription) => {
       };
     }
 
-    // ===============================
-    // CHECKOUT / UPGRADE
-    // ===============================
+    // ======================================================
+    // CHECKOUT & UPGRADE
+    // ======================================================
 
     await connection.query(
       `
@@ -426,6 +435,7 @@ const activateSubscription = async (id_subscription) => {
       ]
     );
 
+    // Jika upgrade/checkout, subscription aktif lama di-expired
     await connection.query(
       `
       UPDATE subscriptions
