@@ -322,7 +322,7 @@ const verifyEmail = async (token) => {
       const tanggalMulai = new Date()
       // Tanggal berakhir = 10000 hari ke depan (agar tidak null)
       const tanggalBerakhir = new Date(tanggalMulai)
-      tanggalBerakhir.setDate(tanggalBerakhir.getDate() + 10000) // +10000 hari
+      tanggalBerakhir.setDate(tanggalBerakhir.getDate() + 30)// +10000 hari
 
       await authModel.createSubscription({
         id_owner: user.id_user,
