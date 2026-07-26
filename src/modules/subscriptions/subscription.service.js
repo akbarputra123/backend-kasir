@@ -254,6 +254,11 @@ const extendSubscription = async (id_subscription, data, currentUser) => {
   if (additional_months < 1) throw new Error("Tambahan bulan minimal 1")
 
   const subscription = await subscriptionModel.findById(id_subscription)
+  console.log("subscription =", subscription);
+  const currentPlan = await subscriptionModel.findPlanById(subscription.id_plan);
+
+console.log("currentPlan =", currentPlan);
+console.log("newPlan =", plan);
   if (!subscription) throw new Error("Subscription tidak ditemukan")
   if (Number(subscription.id_owner) !== Number(currentUser.id_user)) {
     throw new Error("Anda tidak memiliki akses ke subscription ini")
