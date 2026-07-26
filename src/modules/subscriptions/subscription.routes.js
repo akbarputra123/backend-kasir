@@ -264,49 +264,35 @@ router.post(
 )
 
 // ============================================================
-// ROUTE KHUSUS SUPER_ADMIN DAN CEK INVOICE (TAMBAHAN)
+// ROUTE KHUSUS SUPER_ADMIN DAN CEK INVOICE
 // ============================================================
 
 /**
  * @swagger
  * /subscriptions/all:
  *   get:
- *     summary: Ambil semua subscription (hanya super_admin)
- *     description: Mengambil daftar semua subscription dengan filter status dan paginasi.
+ *     summary: Ambil semua subscription
+ *     description: Mengambil seluruh data subscription yang ada di sistem. Endpoint ini hanya dapat diakses oleh super_admin.
  *     tags:
  *       - Subscriptions
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 10
- *         description: Jumlah data per halaman
- *       - in: query
- *         name: offset
- *         schema:
- *           type: integer
- *           default: 0
- *         description: Offset untuk paginasi
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *           enum: [pending, aktif, expired, dibatalkan]
- *         description: Filter berdasarkan status langganan
  *     responses:
  *       200:
  *         description: Data semua subscription berhasil diambil
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Akses ditolak, hanya super_admin
+ *       500:
+ *         description: Terjadi kesalahan pada server
  */
 router.get(
   "/all",
   authMiddleware,
   authorizeRoles("super_admin"),
   getAllSubscriptions
-)
-
+);
 /**
  * @swagger
  * /subscriptions/invoice/{kode_invoice}:

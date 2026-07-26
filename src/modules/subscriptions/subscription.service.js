@@ -308,19 +308,9 @@ const extendSubscription = async (id_subscription, data, currentUser) => {
   )
   return result
 }
-/*
-|--------------------------------------------------------------------------
-| GET ALL SUBSCRIPTIONS (UNTUK SUPER_ADMIN)
-|--------------------------------------------------------------------------
-| Super_admin dapat melihat semua subscription yang ada di sistem.
-| Mendukung filter status dan paginasi.
-|--------------------------------------------------------------------------
-*/
-const getAllSubscriptions = async (options = {}) => {
-  const { limit = 10, offset = 0, status = null } = options;
-  return await subscriptionModel.findAllByOwner(null, { limit, offset, status });
+const getAllSubscriptions = async () => {
+  return await subscriptionModel.findAllByOwner(null);
 };
-
 /*
 |--------------------------------------------------------------------------
 | GET SUBSCRIPTION DETAIL BY ID (UNTUK SUPER_ADMIN)

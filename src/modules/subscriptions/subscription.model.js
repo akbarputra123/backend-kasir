@@ -784,31 +784,23 @@ const extendSubscription = async (
   }
 };
 
-// ============================================================
-// GET SUBSCRIPTIONS BY OWNER (DAFTAR LANGANAN)
-// ============================================================
-
 /*
 |--------------------------------------------------------------------------
-| FIND ALL SUBSCRIPTIONS BY OWNER
+| FIND ALL SUBSCRIPTIONS
 |--------------------------------------------------------------------------
-| @param {number} id_owner - ID pemilik (user)
-| @param {object} options - { limit, offset, status }
-| @returns {Promise<{ subscriptions: Array, total: number }>}
+| Jika id_owner = null => ambil semua subscription (super_admin)
+| Jika id_owner != null => ambil subscription milik owner tersebut
 |--------------------------------------------------------------------------
 */
-const findAllByOwner = async (id_owner, options = {}) => {
-  const { limit = 10, offset = 0, status = null } = options;
+const findAllByOwner = async (id_owner = null) => {
+  let whereClause = "";
+  const params = [];
 
-  let whereClause = 'WHERE s.id_owner = ?';
-  const params = [id_owner];
-
-  if (status) {
-    whereClause += ' AND s.status_langganan = ?';
-    params.push(status);
+  if (id_owner !== null) {
+    whereClause = "WHERE s.id_owner = ?";
+    params.push(id_owner);
   }
 
-  // Query untuk mengambil data
   const query = `
     SELECT
       s.id_subscription,
@@ -837,22 +829,11 @@ const findAllByOwner = async (id_owner, options = {}) => {
     JOIN subscription_plans p ON s.id_plan = p.id_plan
     ${whereClause}
     ORDER BY s.created_at DESC
-    LIMIT ? OFFSET ?
   `;
 
-  const countQuery = `
-    SELECT COUNT(*) AS total
-    FROM subscriptions s
-    ${whereClause}
-  `;
+  const [rows] = await pool.query(query, params);
 
-  const [rows] = await pool.query(query, [...params, limit, offset]);
-  const [countRows] = await pool.query(countQuery, params);
-
-  return {
-    subscriptions: rows,
-    total: countRows[0]?.total || 0,
-  };
+  return rows;
 };
 
 /*

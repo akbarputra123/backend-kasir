@@ -196,31 +196,25 @@ const extendSubscription = async (req, res) => {
     )
   }
 }
-
 /*
 |--------------------------------------------------------------------------
 | GET ALL SUBSCRIPTIONS (UNTUK SUPER_ADMIN)
 |--------------------------------------------------------------------------
-| Query params: ?limit=10&offset=0&status=aktif
-|--------------------------------------------------------------------------
 */
 const getAllSubscriptions = async (req, res) => {
   try {
-    const { limit = 10, offset = 0, status } = req.query;
-    const result = await subscriptionService.getAllSubscriptions(
-      req.user,
-      { limit: parseInt(limit), offset: parseInt(offset), status }
-    );
+    const result = await subscriptionService.getAllSubscriptions(req.user);
+
     return successResponse(
       res,
-      'Data semua subscription berhasil diambil',
+      "Data semua subscription berhasil diambil",
       result,
       200
     );
   } catch (error) {
     return errorResponse(
       res,
-      error.message || 'Gagal mengambil data subscription',
+      error.message || "Gagal mengambil data subscription",
       400,
       error.message
     );
