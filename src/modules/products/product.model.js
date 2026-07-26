@@ -32,14 +32,6 @@ const hargaFinalSql = `
   CASE
     WHEN d.id_discount IS NULL THEN p.harga_jual
 
-    WHEN d.status_diskon != 'aktif' THEN p.harga_jual
-
-    WHEN d.tanggal_mulai IS NOT NULL
-         AND NOW() < d.tanggal_mulai THEN p.harga_jual
-
-    WHEN d.tanggal_berakhir IS NOT NULL
-         AND NOW() > d.tanggal_berakhir THEN p.harga_jual
-
     WHEN d.tipe_diskon = 'persen'
       THEN GREATEST(
         p.harga_jual -
@@ -73,7 +65,11 @@ const findAllByOwner = async (id_owner) => {
       p.id_category,
       c.nama_kategori,
 
-      p.id_discount,
+      CASE
+        WHEN d.id_discount IS NULL THEN NULL
+        ELSE p.id_discount
+      END AS id_discount,
+
       d.nama_diskon,
       d.tipe_diskon,
       d.nilai_diskon,
@@ -108,6 +104,15 @@ const findAllByOwner = async (id_owner) => {
 
     LEFT JOIN discounts d
       ON d.id_discount = p.id_discount
+      AND d.status_diskon = 'aktif'
+      AND (
+        d.tanggal_mulai IS NULL
+        OR NOW() >= d.tanggal_mulai
+      )
+      AND (
+        d.tanggal_berakhir IS NULL
+        OR NOW() <= DATE_ADD(DATE(d.tanggal_berakhir), INTERVAL 1 DAY) - INTERVAL 1 SECOND
+      )
 
     WHERE s.id_owner = ?
 
@@ -118,7 +123,6 @@ const findAllByOwner = async (id_owner) => {
 
   return rows
 }
-
 /*
 |--------------------------------------------------------------------------
 | FIND ALL PRODUCTS BY STORE
@@ -135,7 +139,11 @@ const findAllByStore = async (id_store) => {
       p.id_category,
       c.nama_kategori,
 
-      p.id_discount,
+      CASE
+        WHEN d.id_discount IS NULL THEN NULL
+        ELSE p.id_discount
+      END AS id_discount,
+
       d.nama_diskon,
       d.tipe_diskon,
       d.nilai_diskon,
@@ -170,6 +178,18 @@ const findAllByStore = async (id_store) => {
 
     LEFT JOIN discounts d
       ON d.id_discount = p.id_discount
+      AND d.status_diskon = 'aktif'
+      AND (
+        d.tanggal_mulai IS NULL
+        OR NOW() >= d.tanggal_mulai
+      )
+      AND (
+        d.tanggal_berakhir IS NULL
+        OR NOW() <= DATE_ADD(
+              DATE(d.tanggal_berakhir),
+              INTERVAL 1 DAY
+            ) - INTERVAL 1 SECOND
+      )
 
     WHERE p.id_store = ?
 
@@ -199,7 +219,11 @@ const findById = async (id_product) => {
       p.id_category,
       c.nama_kategori,
 
-      p.id_discount,
+      CASE
+        WHEN d.id_discount IS NULL THEN NULL
+        ELSE p.id_discount
+      END AS id_discount,
+
       d.nama_diskon,
       d.tipe_diskon,
       d.nilai_diskon,
@@ -234,6 +258,18 @@ const findById = async (id_product) => {
 
     LEFT JOIN discounts d
       ON d.id_discount = p.id_discount
+      AND d.status_diskon = 'aktif'
+      AND (
+        d.tanggal_mulai IS NULL
+        OR NOW() >= d.tanggal_mulai
+      )
+      AND (
+        d.tanggal_berakhir IS NULL
+        OR NOW() <= DATE_ADD(
+              DATE(d.tanggal_berakhir),
+              INTERVAL 1 DAY
+            ) - INTERVAL 1 SECOND
+      )
 
     WHERE p.id_product = ?
 
@@ -852,76 +888,83 @@ const create = async (data) => {
     |--------------------------------------------------------------------------
     */
     let discount = null
+if (data.id_discount) {
+  const [discountRows] = await connection.query(
+    `
+    SELECT
+      id_discount,
+      id_store,
+      nama_diskon,
+      tipe_diskon,
+      nilai_diskon,
+      tanggal_mulai,
+      tanggal_berakhir,
+      status_diskon
+    FROM discounts
+    WHERE id_discount = ?
+      AND id_store = ?
+    LIMIT 1
+    `,
+    [
+      data.id_discount,
+      data.id_store
+    ]
+  )
 
-    if (data.id_discount) {
-      const [discountRows] =
-        await connection.query(
-          `
-          SELECT
-            id_discount,
-            id_store,
-            nama_diskon,
-            tipe_diskon,
-            nilai_diskon,
-            tanggal_mulai,
-            tanggal_berakhir,
-            status_diskon
-          FROM discounts
-          WHERE id_discount = ?
-            AND id_store = ?
-          LIMIT 1
-          `,
-          [
-            data.id_discount,
-            data.id_store
-          ]
-        )
+  discount = discountRows[0]
 
-      discount = discountRows[0]
+  if (!discount) {
+    throw createModelError(
+      "Diskon tidak ditemukan pada toko ini",
+      404,
+      "DISCOUNT_NOT_FOUND"
+    )
+  }
 
-      if (!discount) {
-        throw createModelError(
-          "Diskon tidak ditemukan pada toko ini",
-          404,
-          "DISCOUNT_NOT_FOUND"
-        )
-      }
+  if (discount.status_diskon !== "aktif") {
+    throw createModelError(
+      "Diskon sedang nonaktif",
+      403,
+      "DISCOUNT_INACTIVE"
+    )
+  }
 
-      if (
-        discount.status_diskon !== "aktif"
-      ) {
-        throw createModelError(
-          "Diskon sedang nonaktif",
-          403,
-          "DISCOUNT_INACTIVE"
-        )
-      }
+  const now = new Date()
 
-      if (
-        discount.tanggal_mulai &&
-        new Date() <
-          new Date(discount.tanggal_mulai)
-      ) {
-        throw createModelError(
-          "Diskon belum mulai",
-          422,
-          "DISCOUNT_NOT_STARTED"
-        )
-      }
+  // =====================================================
+  // CEK TANGGAL MULAI
+  // Berlaku mulai pukul 00:00:00
+  // =====================================================
+  if (discount.tanggal_mulai) {
+    const start = new Date(discount.tanggal_mulai)
+    start.setHours(0, 0, 0, 0)
 
-      if (
-        discount.tanggal_berakhir &&
-        new Date() >
-          new Date(discount.tanggal_berakhir)
-      ) {
-        throw createModelError(
-          "Diskon sudah berakhir",
-          422,
-          "DISCOUNT_EXPIRED"
-        )
-      }
+    if (now < start) {
+      throw createModelError(
+        "Diskon belum mulai",
+        422,
+        "DISCOUNT_NOT_STARTED"
+      )
     }
+  }
 
+  // =====================================================
+  // CEK TANGGAL BERAKHIR
+  // Berlaku sampai pukul 23:59:59
+  // =====================================================
+  if (discount.tanggal_berakhir) {
+    const end = new Date(discount.tanggal_berakhir)
+    end.setHours(23, 59, 59, 999)
+
+    if (now > end) {
+      throw createModelError(
+        "Diskon sudah berakhir",
+        422,
+        "DISCOUNT_EXPIRED"
+      )
+    }
+  }
+}
     /*
     |--------------------------------------------------------------------------
     | CHECK PRODUCT CODE
@@ -1037,10 +1080,10 @@ const create = async (data) => {
         category?.nama_kategori || null,
 
       id_discount:
-        data.id_discount || null,
+  discount?.id_discount || null,
 
-      nama_diskon:
-        discount?.nama_diskon || null,
+nama_diskon:
+  discount?.nama_diskon || null,
 
       kode_produk: data.kode_produk,
       barcode: data.barcode || null,
