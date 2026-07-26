@@ -418,15 +418,22 @@ const login = async (data = {}) => {
   | VALIDASI TOKO (kecuali super_admin)
   |--------------------------------------------------------------------------
   */
-  if (role !== "super_admin") {
-    if (!user.id_store && (role === "owner" || role === "admin" || role === "kasir")) {
-      throw new Error("Akun belum terhubung dengan toko.")
-    }
-
-    if (user.id_store && user.status_toko !== "aktif") {
-      throw new Error("Toko sedang nonaktif.")
-    }
+ if (role !== "super_admin") {
+  // Semua role selain super_admin harus punya toko
+  // kecuali owner (owner boleh belum punya toko)
+  if (!user.id_store && (role === "admin" || role === "kasir")) {
+    throw new Error("Akun belum terhubung dengan toko.");
   }
+
+  // Toko nonaktif hanya memblokir admin & kasir
+  if (
+    user.id_store &&
+    user.status_toko !== "aktif" &&
+    (role === "admin" || role === "kasir")
+  ) {
+    throw new Error("Toko sedang nonaktif.");
+  }
+}
 
   await authModel.updateLastLogin(user.id_user)
 
