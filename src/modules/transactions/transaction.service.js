@@ -69,26 +69,35 @@ const getTransactionById = async (id_transaction, currentUser) => {
 */
 const isDiscountActive = (product) => {
   if (!product.id_discount) {
-    return false
+    return false;
   }
 
   if (product.status_diskon !== "aktif") {
-    return false
+    return false;
   }
 
-  const now = new Date()
+  const now = new Date();
 
-  if (product.tanggal_mulai && now < new Date(product.tanggal_mulai)) {
-    return false
+  if (product.tanggal_mulai) {
+    const start = new Date(product.tanggal_mulai);
+    start.setHours(0, 0, 0, 0);
+
+    if (now < start) {
+      return false;
+    }
   }
 
-  if (product.tanggal_berakhir && now > new Date(product.tanggal_berakhir)) {
-    return false
+  if (product.tanggal_berakhir) {
+    const end = new Date(product.tanggal_berakhir);
+    end.setHours(23, 59, 59, 999);
+
+    if (now > end) {
+      return false;
+    }
   }
 
-  return true
-}
-
+  return true;
+};
 /*
 |--------------------------------------------------------------------------
 | CALCULATE PRODUCT DISCOUNT
