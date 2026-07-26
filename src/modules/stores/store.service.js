@@ -74,21 +74,12 @@ const validateCurrentUser = (
     role
   }
 }
+const validateOwner = (currentUser) => {
+  const user = validateCurrentUser(currentUser)
 
-/*
-|--------------------------------------------------------------------------
-| VALIDATE OWNER
-|--------------------------------------------------------------------------
-*/
-const validateOwner = (
-  currentUser
-) => {
-  const user =
-    validateCurrentUser(currentUser)
-
-  if (user.role !== "owner") {
+  if (user.role !== "owner" && user.role !== "admin") {
     throw createServiceError(
-      "Hanya owner yang dapat melakukan tindakan ini",
+      "Hanya owner atau admin yang dapat melakukan tindakan ini",
       403,
       "OWNER_ACCESS_REQUIRED"
     )
@@ -96,7 +87,6 @@ const validateOwner = (
 
   return user
 }
-
 /*
 |--------------------------------------------------------------------------
 | VALIDATE EMAIL
