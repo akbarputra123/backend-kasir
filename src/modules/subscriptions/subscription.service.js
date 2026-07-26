@@ -308,7 +308,74 @@ const extendSubscription = async (id_subscription, data, currentUser) => {
   )
   return result
 }
+/*
+|--------------------------------------------------------------------------
+| GET ALL SUBSCRIPTIONS (UNTUK SUPER_ADMIN)
+|--------------------------------------------------------------------------
+| Super_admin dapat melihat semua subscription yang ada di sistem.
+| Mendukung filter status dan paginasi.
+|--------------------------------------------------------------------------
+*/
+const getAllSubscriptions = async (options = {}) => {
+  const { limit = 10, offset = 0, status = null } = options;
+  return await subscriptionModel.findAllByOwner(null, { limit, offset, status });
+};
 
+/*
+|--------------------------------------------------------------------------
+| GET SUBSCRIPTION DETAIL BY ID (UNTUK SUPER_ADMIN)
+|--------------------------------------------------------------------------
+*/
+const getSubscriptionById = async (id_subscription) => {
+  if (!id_subscription) throw new Error("ID subscription wajib diisi");
+  const subscription = await subscriptionModel.findById(id_subscription);
+  if (!subscription) throw new Error("Subscription tidak ditemukan");
+  return subscription;
+};
+
+/*
+|--------------------------------------------------------------------------
+| GET SUBSCRIPTIONS BY OWNER (UNTUK SUPER_ADMIN)
+|--------------------------------------------------------------------------
+| Super_admin dapat melihat daftar subscription milik owner tertentu.
+|--------------------------------------------------------------------------
+*/
+const getSubscriptionsByOwner = async (id_owner, options = {}) => {
+  if (!id_owner) throw new Error("ID owner wajib diisi");
+  return await subscriptionModel.findAllByOwner(id_owner, options);
+};
+
+/*
+|--------------------------------------------------------------------------
+| ACTIVATE SUBSCRIPTION (SUPER_ADMIN BISA UNTUK SEMUA)
+|--------------------------------------------------------------------------
+| Super_admin dapat mengaktifkan subscription milik siapa pun.
+|--------------------------------------------------------------------------
+*/
+const activateSubscriptionAsAdmin = async (id_subscription) => {
+  if (!id_subscription) throw new Error("ID subscription wajib diisi");
+  const subscription = await subscriptionModel.findById(id_subscription);
+  if (!subscription) throw new Error("Subscription tidak ditemukan");
+  await subscriptionModel.activateSubscription(id_subscription);
+  return await subscriptionModel.findById(id_subscription);
+};
+
+/*
+|--------------------------------------------------------------------------
+| CANCEL SUBSCRIPTION AS ADMIN (SUPER_ADMIN)
+|--------------------------------------------------------------------------
+*/
+const cancelSubscriptionAsAdmin = async (id_subscription, catatan = null) => {
+  if (!id_subscription) throw new Error("ID subscription wajib diisi");
+  const subscription = await subscriptionModel.findById(id_subscription);
+  if (!subscription) throw new Error("Subscription tidak ditemukan");
+  if (subscription.status_langganan !== "pending") {
+    throw new Error("Hanya invoice pending yang dapat dibatalkan");
+  }
+  const cancelled = await subscriptionModel.cancelSubscription(id_subscription, catatan);
+  if (!cancelled) throw new Error("Gagal membatalkan subscription");
+  return { id_subscription, status_langganan: "dibatalkan" };
+};
 module.exports = {
   getPlans,
   getMySubscription,
@@ -316,5 +383,12 @@ module.exports = {
   activateSubscription,
   cancelSubscription,
   upgradeSubscription,
-  extendSubscription
-}
+  extendSubscription,
+
+  // 🔹 Tambahan untuk super_admin
+  getAllSubscriptions,
+  getSubscriptionById,
+  getSubscriptionsByOwner,
+  activateSubscriptionAsAdmin,
+  cancelSubscriptionAsAdmin,
+};

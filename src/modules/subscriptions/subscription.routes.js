@@ -6,8 +6,10 @@ const {
   checkoutSubscription,
   activateSubscription,
   cancelSubscription,
-  upgradeSubscription,   // tambahan
-  extendSubscription     // tambahan
+  upgradeSubscription,
+  extendSubscription,
+  getAllSubscriptions,          // sudah benar
+  getSubscriptionByInvoice      // sudah benar
 } = require("./subscription.controller")
 
 const {
@@ -132,7 +134,7 @@ router.post(
 router.post(
   "/activate/:id_subscription",
   authMiddleware,
-  authorizeRoles("super_admin"),   // diubah: hanya super_admin
+  authorizeRoles("super_admin"),
   activateSubscription
 )
 
@@ -259,6 +261,78 @@ router.post(
   authMiddleware,
   authorizeRoles("owner"),
   extendSubscription
+)
+
+// ============================================================
+// ROUTE KHUSUS SUPER_ADMIN DAN CEK INVOICE (TAMBAHAN)
+// ============================================================
+
+/**
+ * @swagger
+ * /subscriptions/all:
+ *   get:
+ *     summary: Ambil semua subscription (hanya super_admin)
+ *     description: Mengambil daftar semua subscription dengan filter status dan paginasi.
+ *     tags:
+ *       - Subscriptions
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Jumlah data per halaman
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Offset untuk paginasi
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, aktif, expired, dibatalkan]
+ *         description: Filter berdasarkan status langganan
+ *     responses:
+ *       200:
+ *         description: Data semua subscription berhasil diambil
+ */
+router.get(
+  "/all",
+  authMiddleware,
+  authorizeRoles("super_admin"),
+  getAllSubscriptions
+)
+
+/**
+ * @swagger
+ * /subscriptions/invoice/{kode_invoice}:
+ *   get:
+ *     summary: Cek status invoice berdasarkan kode invoice
+ *     description: Mendapatkan detail subscription berdasarkan kode invoice. Super_admin dapat mengakses semua, owner hanya miliknya sendiri.
+ *     tags:
+ *       - Subscriptions
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: kode_invoice
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: 'Kode invoice (contoh: INV-SIOPOS-20260726-1234)'   // <-- fix: tambahkan tanda kutip
+ *     responses:
+ *       200:
+ *         description: Data subscription berhasil diambil
+ */
+router.get(
+  "/invoice/:kode_invoice",
+  authMiddleware,
+  authorizeRoles("super_admin", "owner", "admin", "kasir"),
+  getSubscriptionByInvoice
 )
 
 module.exports = router

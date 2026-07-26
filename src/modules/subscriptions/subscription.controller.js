@@ -1,3 +1,5 @@
+// subscription.controller.js
+
 const subscriptionService = require("./subscription.service")
 const { successResponse, errorResponse } = require("../../utils/response")
 
@@ -195,12 +197,77 @@ const extendSubscription = async (req, res) => {
   }
 }
 
+/*
+|--------------------------------------------------------------------------
+| GET ALL SUBSCRIPTIONS (UNTUK SUPER_ADMIN)
+|--------------------------------------------------------------------------
+| Query params: ?limit=10&offset=0&status=aktif
+|--------------------------------------------------------------------------
+*/
+const getAllSubscriptions = async (req, res) => {
+  try {
+    const { limit = 10, offset = 0, status } = req.query;
+    const result = await subscriptionService.getAllSubscriptions(
+      req.user,
+      { limit: parseInt(limit), offset: parseInt(offset), status }
+    );
+    return successResponse(
+      res,
+      'Data semua subscription berhasil diambil',
+      result,
+      200
+    );
+  } catch (error) {
+    return errorResponse(
+      res,
+      error.message || 'Gagal mengambil data subscription',
+      400,
+      error.message
+    );
+  }
+};
+
+/*
+|--------------------------------------------------------------------------
+| GET SUBSCRIPTION BY INVOICE
+|--------------------------------------------------------------------------
+| Path: /api/subscriptions/invoice/:kode_invoice
+|--------------------------------------------------------------------------
+*/
+const getSubscriptionByInvoice = async (req, res) => {
+  try {
+    const { kode_invoice } = req.params;
+    const subscription = await subscriptionService.getSubscriptionByInvoice(
+      kode_invoice,
+      req.user
+    );
+    return successResponse(
+      res,
+      'Data subscription berhasil diambil',
+      subscription,
+      200
+    );
+  } catch (error) {
+    return errorResponse(
+      res,
+      error.message || 'Gagal mengambil data subscription',
+      400,
+      error.message
+    );
+  }
+};
+
+// ============================================================
+// EXPORT
+// ============================================================
 module.exports = {
   getPlans,
   getMySubscription,
   checkoutSubscription,
   activateSubscription,
   cancelSubscription,
-  upgradeSubscription,   // tambahan
-  extendSubscription     // tambahan
-}
+  upgradeSubscription,
+  extendSubscription,
+  getAllSubscriptions,        // sudah benar
+  getSubscriptionByInvoice    // sudah benar
+};

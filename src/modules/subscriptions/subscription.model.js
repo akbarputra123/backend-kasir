@@ -783,6 +783,175 @@ const extendSubscription = async (
     connection.release();
   }
 };
+
+// ============================================================
+// GET SUBSCRIPTIONS BY OWNER (DAFTAR LANGANAN)
+// ============================================================
+
+/*
+|--------------------------------------------------------------------------
+| FIND ALL SUBSCRIPTIONS BY OWNER
+|--------------------------------------------------------------------------
+| @param {number} id_owner - ID pemilik (user)
+| @param {object} options - { limit, offset, status }
+| @returns {Promise<{ subscriptions: Array, total: number }>}
+|--------------------------------------------------------------------------
+*/
+const findAllByOwner = async (id_owner, options = {}) => {
+  const { limit = 10, offset = 0, status = null } = options;
+
+  let whereClause = 'WHERE s.id_owner = ?';
+  const params = [id_owner];
+
+  if (status) {
+    whereClause += ' AND s.status_langganan = ?';
+    params.push(status);
+  }
+
+  // Query untuk mengambil data
+  const query = `
+    SELECT
+      s.id_subscription,
+      s.id_owner,
+      u.nama_lengkap AS nama_owner,
+      s.id_plan,
+      p.nama_paket,
+      p.durasi_hari,
+      p.batas_toko,
+      p.batas_user,
+      p.batas_produk,
+      s.jumlah_bulan,
+      s.kode_invoice,
+      s.tanggal_mulai,
+      s.tanggal_berakhir,
+      s.harga,
+      s.status_langganan,
+      s.metode_pembayaran,
+      s.bukti_pembayaran,
+      s.catatan,
+      s.created_at,
+      s.updated_at,
+      DATEDIFF(s.tanggal_berakhir, NOW()) AS sisa_hari
+    FROM subscriptions s
+    JOIN users u ON s.id_owner = u.id_user
+    JOIN subscription_plans p ON s.id_plan = p.id_plan
+    ${whereClause}
+    ORDER BY s.created_at DESC
+    LIMIT ? OFFSET ?
+  `;
+
+  const countQuery = `
+    SELECT COUNT(*) AS total
+    FROM subscriptions s
+    ${whereClause}
+  `;
+
+  const [rows] = await pool.query(query, [...params, limit, offset]);
+  const [countRows] = await pool.query(countQuery, params);
+
+  return {
+    subscriptions: rows,
+    total: countRows[0]?.total || 0,
+  };
+};
+
+/*
+|--------------------------------------------------------------------------
+| FIND SUBSCRIPTION BY INVOICE (UNTUK CEK STATUS)
+|--------------------------------------------------------------------------
+*/
+const findByInvoice = async (kode_invoice) => {
+  const [rows] = await pool.query(
+    `
+    SELECT
+      s.id_subscription,
+      s.id_owner,
+      s.id_plan,
+      p.nama_paket,
+      s.jumlah_bulan,
+      s.kode_invoice,
+      s.tanggal_mulai,
+      s.tanggal_berakhir,
+      s.harga,
+      s.status_langganan,
+      s.metode_pembayaran,
+      s.bukti_pembayaran,
+      s.catatan,
+      s.created_at
+    FROM subscriptions s
+    JOIN subscription_plans p ON s.id_plan = p.id_plan
+    WHERE s.kode_invoice = ?
+    LIMIT 1
+    `,
+    [kode_invoice]
+  );
+  return rows[0] || null;
+};
+/*
+|--------------------------------------------------------------------------
+| FIND ALL SUBSCRIPTIONS (UNTUK SUPER_ADMIN)
+|--------------------------------------------------------------------------
+| @param {object} options - { limit, offset, status }
+| @returns {Promise<{ subscriptions: Array, total: number }>}
+|--------------------------------------------------------------------------
+*/
+const findAll = async (options = {}) => {
+  const { limit = 10, offset = 0, status = null } = options;
+
+  let whereClause = 'WHERE 1=1';
+  const params = [];
+
+  if (status) {
+    whereClause += ' AND s.status_langganan = ?';
+    params.push(status);
+  }
+
+  const query = `
+    SELECT
+      s.id_subscription,
+      s.id_owner,
+      u.nama_lengkap AS nama_owner,
+      s.id_plan,
+      p.nama_paket,
+      p.durasi_hari,
+      p.batas_toko,
+      p.batas_user,
+      p.batas_produk,
+      s.jumlah_bulan,
+      s.kode_invoice,
+      s.tanggal_mulai,
+      s.tanggal_berakhir,
+      s.harga,
+      s.status_langganan,
+      s.metode_pembayaran,
+      s.bukti_pembayaran,
+      s.catatan,
+      s.created_at,
+      s.updated_at,
+      DATEDIFF(s.tanggal_berakhir, NOW()) AS sisa_hari
+    FROM subscriptions s
+    JOIN users u ON s.id_owner = u.id_user
+    JOIN subscription_plans p ON s.id_plan = p.id_plan
+    ${whereClause}
+    ORDER BY s.created_at DESC
+    LIMIT ? OFFSET ?
+  `;
+
+  const countQuery = `
+    SELECT COUNT(*) AS total
+    FROM subscriptions s
+    ${whereClause}
+  `;
+
+  const [rows] = await pool.query(query, [...params, limit, offset]);
+  const [countRows] = await pool.query(countQuery, params);
+
+  return {
+    subscriptions: rows,
+    total: countRows[0]?.total || 0,
+  };
+};
+
 module.exports = {
   findActivePlans,
   findPlanById,
@@ -796,6 +965,9 @@ module.exports = {
   cancelSubscription,
   expireOldSubscriptions,
   expireAllActiveSubscriptionsForOwner,
-  upgradeSubscription,   // baru
-  extendSubscription     // baru
+  upgradeSubscription,
+  extendSubscription,
+  findAllByOwner,        // tambahkan
+  findByInvoice,   
+   findAll,      // tambahkan
 };
