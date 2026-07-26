@@ -207,37 +207,76 @@ const cancelSubscription = async (id_subscription, data, currentUser) => {
 */
 const upgradeSubscription = async (id_subscription, data, currentUser) => {
   if (!currentUser || currentUser.role !== "owner") {
-    throw new Error("Hanya owner yang dapat melakukan upgrade")
+    throw new Error("Hanya owner yang dapat melakukan upgrade");
   }
-  const { new_plan_id, jumlah_bulan = 1 } = data
-  if (!new_plan_id) throw new Error("ID plan baru wajib diisi")
-  if (jumlah_bulan < 1) throw new Error("Jumlah bulan minimal 1")
 
-  const subscription = await subscriptionModel.findById(id_subscription)
-  if (!subscription) throw new Error("Subscription tidak ditemukan")
+  const { new_plan_id, jumlah_bulan = 1 } = data;
+
+  if (!new_plan_id) {
+    throw new Error("ID plan baru wajib diisi");
+  }
+
+  if (jumlah_bulan < 1) {
+    throw new Error("Jumlah bulan minimal 1");
+  }
+
+  console.log("========== UPGRADE ==========");
+
+  const subscription = await subscriptionModel.findById(id_subscription);
+
+  console.log("Subscription :", subscription);
+
+  if (!subscription) {
+    throw new Error("Subscription tidak ditemukan");
+  }
+
   if (Number(subscription.id_owner) !== Number(currentUser.id_user)) {
-    throw new Error("Anda tidak memiliki akses ke subscription ini")
+    throw new Error("Anda tidak memiliki akses ke subscription ini");
   }
+
   if (subscription.status_langganan !== "aktif") {
-    throw new Error("Hanya subscription aktif yang dapat di-upgrade")
+    throw new Error("Hanya subscription aktif yang dapat di-upgrade");
   }
 
-  const plan = await subscriptionModel.findPlanById(new_plan_id)
-  if (!plan) throw new Error("Paket baru tidak ditemukan")
-  if (plan.status_paket !== "aktif") throw new Error("Paket baru tidak aktif")
+  const plan = await subscriptionModel.findPlanById(new_plan_id);
 
-  const currentPlan = await subscriptionModel.findPlanById(subscription.id_plan)
-  if (plan.harga <= currentPlan.harga) {
-    throw new Error("Upgrade hanya bisa ke paket dengan harga lebih tinggi")
+  console.log("Plan Baru :", plan);
+
+  if (!plan) {
+    throw new Error("Paket baru tidak ditemukan");
+  }
+
+  if (plan.status_paket !== "aktif") {
+    throw new Error("Paket baru tidak aktif");
+  }
+
+  const currentPlan = await subscriptionModel.findPlanById(subscription.id_plan);
+
+  console.log("Plan Lama :", currentPlan);
+
+  console.log({
+    currentSubscriptionId: subscription.id_subscription,
+    currentPlanId: subscription.id_plan,
+    currentPlanPrice: Number(currentPlan.harga),
+
+    newPlanId: plan.id_plan,
+    newPlanPrice: Number(plan.harga),
+
+    isUpgrade: Number(plan.harga) > Number(currentPlan.harga)
+  });
+
+  if (Number(plan.harga) <= Number(currentPlan.harga)) {
+    throw new Error("Upgrade hanya bisa ke paket dengan harga lebih tinggi");
   }
 
   const result = await subscriptionModel.upgradeSubscription(
     id_subscription,
     new_plan_id,
     jumlah_bulan
-  )
-  return result
-}
+  );
+
+  return result;
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -254,11 +293,6 @@ const extendSubscription = async (id_subscription, data, currentUser) => {
   if (additional_months < 1) throw new Error("Tambahan bulan minimal 1")
 
   const subscription = await subscriptionModel.findById(id_subscription)
-  console.log("subscription =", subscription);
-  const currentPlan = await subscriptionModel.findPlanById(subscription.id_plan);
-
-console.log("currentPlan =", currentPlan);
-console.log("newPlan =", plan);
   if (!subscription) throw new Error("Subscription tidak ditemukan")
   if (Number(subscription.id_owner) !== Number(currentUser.id_user)) {
     throw new Error("Anda tidak memiliki akses ke subscription ini")
