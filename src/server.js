@@ -5,6 +5,7 @@ const os = require("os")
 require("dotenv").config()
 
 const app = require("./app")
+const startDiscountCron = require("./jobs/discountCron");
 
 const {
   initSocket
@@ -102,6 +103,8 @@ const startServer = async () => {
 
     const publicSwaggerUrl =
       `http://${PUBLIC_HOST}:${PORT}/api-docs`
+
+      startDiscountCron();
 
     console.log("")
     console.log("==============================================")
