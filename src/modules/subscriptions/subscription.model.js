@@ -534,6 +534,14 @@ const expireAllActiveSubscriptionsForOwner = async (id_owner, excludeId) => {
 | Subscription lama tetap aktif sampai invoice di-approve.
 |--------------------------------------------------------------------------
 */
+/*
+|--------------------------------------------------------------------------
+| UPGRADE SUBSCRIPTION
+|--------------------------------------------------------------------------
+| Membuat invoice upgrade baru.
+| Seluruh validasi business rule dilakukan di service.
+|--------------------------------------------------------------------------
+*/
 const upgradeSubscription = async (
   id_subscription,
   newPlanId,
@@ -544,16 +552,15 @@ const upgradeSubscription = async (
   try {
     await connection.beginTransaction();
 
-    // Ambil subscription lama
+    // Ambil subscription aktif yang akan di-upgrade
     const [subRows] = await connection.query(
       `
       SELECT
-        s.id_subscription,
-        s.id_owner,
-        s.id_plan,
-        s.status_langganan
-      FROM subscriptions s
-      WHERE s.id_subscription = ?
+        id_subscription,
+        id_owner,
+        status_langganan
+      FROM subscriptions
+      WHERE id_subscription = ?
       LIMIT 1
       FOR UPDATE
       `,
@@ -570,28 +577,7 @@ const upgradeSubscription = async (
       throw new Error("Hanya subscription aktif yang bisa di-upgrade");
     }
 
-    // Ambil plan lama
-    const oldPlan = await findPlanById(subscription.id_plan);
-
-    // Ambil plan baru
-    const newPlan = await findPlanById(newPlanId);
-
-    if (!newPlan) {
-      throw new Error("Plan baru tidak ditemukan");
-    }
-
-    if (newPlan.status_paket !== "aktif") {
-      throw new Error("Plan baru tidak aktif");
-    }
-
-    // Tidak boleh downgrade
-    if (newPlan.harga <= oldPlan.harga) {
-      throw new Error(
-        "Upgrade hanya dapat dilakukan ke paket dengan harga lebih tinggi"
-      );
-    }
-
-    // Cek apakah masih ada invoice pending
+    // Pastikan tidak ada invoice pending
     const [pendingRows] = await connection.query(
       `
       SELECT id_subscription
@@ -607,10 +593,17 @@ const upgradeSubscription = async (
       throw new Error("Masih ada invoice langganan yang pending");
     }
 
-    const totalHarga = newPlan.harga * newJumlahBulan;
+    // Ambil harga paket baru
+    const newPlan = await findPlanById(newPlanId);
+
+    if (!newPlan) {
+      throw new Error("Plan baru tidak ditemukan");
+    }
+
+    const totalHarga = Number(newPlan.harga) * Number(newJumlahBulan);
     const kodeInvoice = await generateInvoiceCode();
 
-    // Buat invoice upgrade (pending)
+    // Buat invoice upgrade
     const [result] = await connection.query(
       `
       INSERT INTO subscriptions
@@ -634,11 +627,11 @@ const upgradeSubscription = async (
       [
         subscription.id_owner,
         newPlanId,
-        id_subscription, // subscription lama
+        id_subscription,
         newJumlahBulan,
         kodeInvoice,
         totalHarga,
-        `Upgrade dari paket ${oldPlan.nama_paket}`
+        `Upgrade ke paket ${newPlan.nama_paket}`
       ]
     );
 
@@ -655,7 +648,7 @@ const upgradeSubscription = async (
       kode_invoice: kodeInvoice,
       status_langganan: "pending",
       metode_pembayaran: "manual_transfer",
-      is_upgrade: true
+      is_upgrade: true,
     };
   } catch (error) {
     await connection.rollback();
