@@ -504,8 +504,11 @@ const createStore = async (
     validateStoreData(data)
 
   return await storeModel.create({
-    id_owner:
-      owner.id_user,
+    id_owner: owner.id_user,
+
+    id_business_category: Number(
+      data.id_business_category
+    ),
 
     ...finalData
   })

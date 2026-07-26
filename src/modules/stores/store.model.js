@@ -38,20 +38,34 @@ const findByOwnerId = async (id_owner) => {
       s.id_store,
       s.id_owner,
       u.nama_lengkap AS nama_owner,
+
+      s.id_business_category,
+      bc.nama_kategori AS nama_kategori_bisnis,
+
       s.nama_toko,
       s.alamat,
       s.no_hp,
       s.email,
       s.logo,
+
       s.status_toko,
+
       s.ppn_aktif,
       s.ppn_persen,
+
       s.created_at,
       s.updated_at
+
     FROM stores s
+
     INNER JOIN users u
       ON u.id_user = s.id_owner
+
+    INNER JOIN business_categories bc
+      ON bc.id_business_category = s.id_business_category
+
     WHERE s.id_owner = ?
+
     ORDER BY s.id_store DESC
     `,
     [id_owner]
@@ -75,19 +89,32 @@ const findById = async (id_store) => {
       s.id_store,
       s.id_owner,
       u.nama_lengkap AS nama_owner,
+
+      s.id_business_category,
+      bc.nama_kategori AS nama_kategori_bisnis,
+
       s.nama_toko,
       s.alamat,
       s.no_hp,
       s.email,
       s.logo,
+
       s.status_toko,
+
       s.ppn_aktif,
       s.ppn_persen,
+
       s.created_at,
       s.updated_at
+
     FROM stores s
+
     INNER JOIN users u
       ON u.id_user = s.id_owner
+
+    INNER JOIN business_categories bc
+      ON bc.id_business_category = s.id_business_category
+
     WHERE s.id_store = ?
     LIMIT 1
     `,
@@ -96,7 +123,6 @@ const findById = async (id_store) => {
 
   return rows[0] || null
 }
-
 /*
 |--------------------------------------------------------------------------
 | FIND STORE BY ID AND OWNER
@@ -114,21 +140,35 @@ const findByIdAndOwner = async (
       s.id_store,
       s.id_owner,
       u.nama_lengkap AS nama_owner,
+
+      s.id_business_category,
+      bc.nama_kategori AS nama_kategori_bisnis,
+
       s.nama_toko,
       s.alamat,
       s.no_hp,
       s.email,
       s.logo,
+
       s.status_toko,
+
       s.ppn_aktif,
       s.ppn_persen,
+
       s.created_at,
       s.updated_at
+
     FROM stores s
+
     INNER JOIN users u
       ON u.id_user = s.id_owner
+
+    INNER JOIN business_categories bc
+      ON bc.id_business_category = s.id_business_category
+
     WHERE s.id_store = ?
       AND s.id_owner = ?
+
     LIMIT 1
     `,
     [
@@ -370,6 +410,52 @@ const create = async (data) => {
       countRows[0]?.total || 0
     )
 
+    /*
+|--------------------------------------------------------------------------
+| BUSINESS CATEGORY
+|--------------------------------------------------------------------------
+| Toko pertama menggunakan kategori bisnis yang dipilih owner.
+| Toko berikutnya otomatis mengikuti kategori bisnis toko pertama.
+|--------------------------------------------------------------------------
+*/
+let businessCategoryId = Number(
+  data.id_business_category || 0
+)
+
+if (totalStore > 0) {
+  const [businessRows] = await connection.query(
+    `
+    SELECT
+      id_business_category
+    FROM stores
+    WHERE id_owner = ?
+    ORDER BY id_store ASC
+    LIMIT 1
+    `,
+    [data.id_owner]
+  )
+
+  if (!businessRows[0]) {
+    throw createModelError(
+      "Kategori bisnis toko pertama tidak ditemukan",
+      500,
+      "BUSINESS_CATEGORY_NOT_FOUND"
+    )
+  }
+
+  businessCategoryId = Number(
+    businessRows[0].id_business_category
+  )
+}
+
+if (!businessCategoryId) {
+  throw createModelError(
+    "Kategori bisnis wajib dipilih",
+    422,
+    "BUSINESS_CATEGORY_REQUIRED"
+  )
+}
+
     const storeLimit = Number(
       subscription.batas_toko || 0
     )
@@ -485,30 +571,32 @@ const create = async (data) => {
       await connection.query(
         `
         INSERT INTO stores
-        (
-          id_owner,
-          nama_toko,
-          alamat,
-          no_hp,
-          email,
-          logo,
-          status_toko,
-          ppn_aktif,
-          ppn_persen
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+(
+  id_owner,
+  id_business_category,
+  nama_toko,
+  alamat,
+  no_hp,
+  email,
+  logo,
+  status_toko,
+  ppn_aktif,
+  ppn_persen
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
-        [
-          data.id_owner,
-          finalNamaToko,
-          finalAlamat,
-          finalNoHp,
-          finalEmail,
-          finalLogo,
-          finalStatusToko,
-          finalPpnAktif,
-          finalPpnPersen
-        ]
+       [
+  data.id_owner,
+  businessCategoryId,
+  finalNamaToko,
+  finalAlamat,
+  finalNoHp,
+  finalEmail,
+  finalLogo,
+  finalStatusToko,
+  finalPpnAktif,
+  finalPpnPersen
+]
       )
 
     const idStore = result.insertId
@@ -526,72 +614,54 @@ const create = async (data) => {
 
     await connection.commit()
 
-    return {
-      id_store:
-        idStore,
+   return {
+  id_store: idStore,
 
-      id_owner:
-        Number(data.id_owner),
+  id_owner: Number(data.id_owner),
 
-      nama_owner:
-        owner.nama_lengkap,
+  id_business_category: businessCategoryId,
 
-      nama_toko:
-        finalNamaToko,
+  nama_owner: owner.nama_lengkap,
 
-      alamat:
-        finalAlamat,
+  nama_toko: finalNamaToko,
 
-      no_hp:
-        finalNoHp,
+  alamat: finalAlamat,
 
-      email:
-        finalEmail,
+  no_hp: finalNoHp,
 
-      logo:
-        finalLogo,
+  email: finalEmail,
 
-      status_toko:
-        finalStatusToko,
+  logo: finalLogo,
 
-      ppn_aktif:
-        finalPpnAktif,
+  status_toko: finalStatusToko,
 
-      ppn_persen:
-        finalPpnPersen,
+  ppn_aktif: finalPpnAktif,
 
-      penggunaan_paket: {
-        id_subscription:
-          subscription.id_subscription,
+  ppn_persen: finalPpnPersen,
 
-        id_plan:
-          subscription.id_plan,
+  penggunaan_paket: {
+    id_subscription: subscription.id_subscription,
 
-        nama_paket:
-          subscription.nama_paket,
+    id_plan: subscription.id_plan,
 
-        batas_toko:
-          storeLimit,
+    nama_paket: subscription.nama_paket,
 
-        total_toko_sebelum:
-          totalStore,
+    batas_toko: storeLimit,
 
-        total_toko_sekarang:
-          totalStore + 1,
+    total_toko_sebelum: totalStore,
 
-        sisa_toko: Math.max(
-          storeLimit -
-          (totalStore + 1),
-          0
-        ),
+    total_toko_sekarang: totalStore + 1,
 
-        tanggal_mulai:
-          subscription.tanggal_mulai,
+    sisa_toko: Math.max(
+      storeLimit - (totalStore + 1),
+      0
+    ),
 
-        tanggal_berakhir:
-          subscription.tanggal_berakhir
-      }
-    }
+    tanggal_mulai: subscription.tanggal_mulai,
+
+    tanggal_berakhir: subscription.tanggal_berakhir
+  }
+}
   } catch (error) {
     await connection.rollback()
 
