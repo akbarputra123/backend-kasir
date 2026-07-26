@@ -1,17 +1,16 @@
 const express = require("express")
-
 const {
   getPlans,
   getMySubscription,
   checkoutSubscription,
   activateSubscription,
   cancelSubscription,
+  deleteSubscription,
   upgradeSubscription,
   extendSubscription,
-  getAllSubscriptions,          // sudah benar
-  getSubscriptionByInvoice      // sudah benar
-} = require("./subscription.controller")
-
+  getAllSubscriptions,
+  getSubscriptionByInvoice,
+} = require("./subscription.controller");
 const {
   authMiddleware,
   authorizeRoles
@@ -175,6 +174,33 @@ router.post(
   authorizeRoles("super_admin"),
   cancelSubscription
 )
+
+/**
+ * @swagger
+ * /subscriptions/{id_subscription}:
+ *   delete:
+ *     summary: Hapus subscription
+ *     description: Menghapus subscription yang berstatus pending atau dibatalkan. Hanya dapat diakses oleh super_admin.
+ *     tags:
+ *       - Subscriptions
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id_subscription
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Subscription berhasil dihapus
+ */
+router.delete(
+  "/:id_subscription",
+  authMiddleware,
+  authorizeRoles("super_admin"),
+  deleteSubscription
+);
 
 /**
  * @swagger

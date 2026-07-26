@@ -933,6 +933,26 @@ const findAll = async (options = {}) => {
   };
 };
 
+/*
+|--------------------------------------------------------------------------
+| DELETE SUBSCRIPTION
+|--------------------------------------------------------------------------
+| Menghapus subscription yang masih pending atau dibatalkan.
+|--------------------------------------------------------------------------
+*/
+const deleteSubscription = async (id_subscription) => {
+  const [result] = await pool.query(
+    `
+    DELETE FROM subscriptions
+    WHERE id_subscription = ?
+      AND status_langganan IN ('pending','dibatalkan')
+    `,
+    [id_subscription]
+  );
+
+  return result.affectedRows > 0;
+};
+
 module.exports = {
   findActivePlans,
   findPlanById,
@@ -944,6 +964,7 @@ module.exports = {
   createCheckout,
   activateSubscription,
   cancelSubscription,
+   deleteSubscription, // <-- tambahkan
   expireOldSubscriptions,
   expireAllActiveSubscriptionsForOwner,
   upgradeSubscription,

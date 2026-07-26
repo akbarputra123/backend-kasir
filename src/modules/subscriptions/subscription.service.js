@@ -378,6 +378,61 @@ const cancelSubscription = async (
     status_langganan: "dibatalkan",
   };
 };
+
+/*
+|--------------------------------------------------------------------------
+| DELETE SUBSCRIPTION (SUPER_ADMIN)
+|--------------------------------------------------------------------------
+*/
+const deleteSubscription = async (
+  id_subscription,
+  currentUser
+) => {
+  if (!currentUser) {
+    throw new Error("User tidak valid");
+  }
+
+  if (currentUser.role !== "super_admin") {
+    throw new Error(
+      "Hanya super_admin yang dapat menghapus subscription"
+    );
+  }
+
+  if (!id_subscription) {
+    throw new Error("ID subscription wajib diisi");
+  }
+
+  const subscription =
+    await subscriptionModel.findById(id_subscription);
+
+  if (!subscription) {
+    throw new Error("Subscription tidak ditemukan");
+  }
+
+  // hanya boleh menghapus pending / dibatalkan
+  if (
+    subscription.status_langganan !== "pending" &&
+    subscription.status_langganan !== "dibatalkan"
+  ) {
+    throw new Error(
+      "Hanya subscription pending atau dibatalkan yang dapat dihapus"
+    );
+  }
+
+  const deleted =
+    await subscriptionModel.deleteSubscription(
+      id_subscription
+    );
+
+  if (!deleted) {
+    throw new Error("Gagal menghapus subscription");
+  }
+
+  return {
+    id_subscription: Number(id_subscription),
+    deleted: true,
+  };
+};
 module.exports = {
   getPlans,
   getMySubscription,
@@ -387,10 +442,10 @@ module.exports = {
   upgradeSubscription,
   extendSubscription,
 
-  // 🔹 Tambahan untuk super_admin
+  // super admin
   getAllSubscriptions,
   getSubscriptionById,
   getSubscriptionsByOwner,
   activateSubscriptionAsAdmin,
- 
+  deleteSubscription, // <-- tambahkan
 };

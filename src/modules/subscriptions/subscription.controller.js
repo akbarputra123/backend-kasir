@@ -251,17 +251,42 @@ const getSubscriptionByInvoice = async (req, res) => {
   }
 };
 
-// ============================================================
-// EXPORT
-// ============================================================
+/*
+|--------------------------------------------------------------------------
+| DELETE SUBSCRIPTION (SUPER_ADMIN)
+|--------------------------------------------------------------------------
+*/
+const deleteSubscription = async (req, res) => {
+  try {
+    const result = await subscriptionService.deleteSubscription(
+      req.params.id_subscription,
+      req.user
+    );
+
+    return successResponse(
+      res,
+      "Subscription berhasil dihapus",
+      result,
+      200
+    );
+  } catch (error) {
+    return errorResponse(
+      res,
+      error.message || "Gagal menghapus subscription",
+      400,
+      error.message
+    );
+  }
+};
 module.exports = {
   getPlans,
   getMySubscription,
   checkoutSubscription,
   activateSubscription,
   cancelSubscription,
+  deleteSubscription,      // <-- tambahkan
   upgradeSubscription,
   extendSubscription,
-  getAllSubscriptions,        // sudah benar
-  getSubscriptionByInvoice    // sudah benar
+  getAllSubscriptions,
+  getSubscriptionByInvoice,
 };
