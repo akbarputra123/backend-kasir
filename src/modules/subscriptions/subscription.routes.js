@@ -172,7 +172,7 @@ router.post(
 router.post(
   "/cancel/:id_subscription",
   authMiddleware,
-  authorizeRoles("owner"),
+  authorizeRoles("super_admin"),
   cancelSubscription
 )
 

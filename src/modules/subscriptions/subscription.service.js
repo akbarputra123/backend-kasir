@@ -162,41 +162,6 @@ const activateSubscription = async (id_subscription, currentUser) => {
   return await subscriptionModel.findById(result.id_subscription)
 }
 
-/*
-|--------------------------------------------------------------------------
-| CANCEL SUBSCRIPTION
-|--------------------------------------------------------------------------
-| Hanya owner yang bisa membatalkan invoice miliknya sendiri.
-| Super_admin tidak diperlukan untuk fitur ini, tapi jika ingin, bisa ditambahkan.
-| Untuk saat ini tetap owner.
-|--------------------------------------------------------------------------
-*/
-const cancelSubscription = async (id_subscription, data, currentUser) => {
-  if (!currentUser || currentUser.role !== "owner") {
-    throw new Error("Hanya owner yang dapat membatalkan invoice langganan")
-  }
-  if (!id_subscription) throw new Error("ID subscription wajib diisi")
-
-  const subscription = await subscriptionModel.findById(id_subscription)
-  if (!subscription) throw new Error("Subscription tidak ditemukan")
-  if (Number(subscription.id_owner) !== Number(currentUser.id_user)) {
-    throw new Error("Anda tidak memiliki akses ke subscription ini")
-  }
-  if (subscription.status_langganan !== "pending") {
-    throw new Error("Hanya invoice pending yang dapat dibatalkan")
-  }
-
-  const cancelled = await subscriptionModel.cancelSubscription(
-    id_subscription,
-    data.catatan
-  )
-  if (!cancelled) throw new Error("Gagal membatalkan subscription")
-
-  return {
-    id_subscription: Number(id_subscription),
-    status_langganan: "dibatalkan"
-  }
-}
 
 /*
 |--------------------------------------------------------------------------
@@ -349,22 +314,69 @@ const activateSubscriptionAsAdmin = async (id_subscription) => {
   await subscriptionModel.activateSubscription(id_subscription);
   return await subscriptionModel.findById(id_subscription);
 };
-
-/*
-|--------------------------------------------------------------------------
-| CANCEL SUBSCRIPTION AS ADMIN (SUPER_ADMIN)
-|--------------------------------------------------------------------------
-*/
-const cancelSubscriptionAsAdmin = async (id_subscription, catatan = null) => {
-  if (!id_subscription) throw new Error("ID subscription wajib diisi");
-  const subscription = await subscriptionModel.findById(id_subscription);
-  if (!subscription) throw new Error("Subscription tidak ditemukan");
-  if (subscription.status_langganan !== "pending") {
-    throw new Error("Hanya invoice pending yang dapat dibatalkan");
+const cancelSubscription = async (
+  id_subscription,
+  data,
+  currentUser
+) => {
+  if (!currentUser) {
+    throw new Error("User tidak valid");
   }
-  const cancelled = await subscriptionModel.cancelSubscription(id_subscription, catatan);
-  if (!cancelled) throw new Error("Gagal membatalkan subscription");
-  return { id_subscription, status_langganan: "dibatalkan" };
+
+  if (
+    currentUser.role !== "owner" &&
+    currentUser.role !== "super_admin"
+  ) {
+    throw new Error(
+      "Hanya owner atau super_admin yang dapat membatalkan invoice langganan"
+    );
+  }
+
+  if (!id_subscription) {
+    throw new Error("ID subscription wajib diisi");
+  }
+
+  const subscription =
+    await subscriptionModel.findById(id_subscription);
+
+  if (!subscription) {
+    throw new Error("Subscription tidak ditemukan");
+  }
+
+  // owner hanya boleh membatalkan miliknya sendiri
+  if (currentUser.role === "owner") {
+    if (
+      Number(subscription.id_owner) !==
+      Number(currentUser.id_user)
+    ) {
+      throw new Error(
+        "Anda tidak memiliki akses ke subscription ini"
+      );
+    }
+  }
+
+  if (subscription.status_langganan !== "pending") {
+    throw new Error(
+      "Hanya invoice pending yang dapat dibatalkan"
+    );
+  }
+
+  const cancelled =
+    await subscriptionModel.cancelSubscription(
+      id_subscription,
+      data?.catatan
+    );
+
+  if (!cancelled) {
+    throw new Error(
+      "Gagal membatalkan subscription"
+    );
+  }
+
+  return {
+    id_subscription: Number(id_subscription),
+    status_langganan: "dibatalkan",
+  };
 };
 module.exports = {
   getPlans,
@@ -380,5 +392,5 @@ module.exports = {
   getSubscriptionById,
   getSubscriptionsByOwner,
   activateSubscriptionAsAdmin,
-  cancelSubscriptionAsAdmin,
+ 
 };
