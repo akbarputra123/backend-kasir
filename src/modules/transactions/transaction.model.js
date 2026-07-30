@@ -91,36 +91,44 @@ const findById = async (id_transaction) => {
   const [rows] = await pool.query(
     `
     SELECT
-      t.id_transaction,
-      t.id_store,
-      s.id_owner,
-      s.id_business_category,
-      s.nama_toko,
-      s.status_toko,
-      t.id_user,
-      u.nama_lengkap AS nama_kasir,
-      t.kode_transaksi,
-      t.total_item,
-      t.total_qty,
-      t.subtotal,
-      t.diskon,
-      t.pajak,
-      t.ppn_persen,
-      t.grand_total,
-      t.metode_pembayaran,
-      t.jumlah_bayar,
-      t.kembalian,
-      t.status_transaksi,
-      t.catatan,
-      t.created_at,
-      t.updated_at
-    FROM transactions t
-    INNER JOIN stores s
-      ON s.id_store = t.id_store
-    LEFT JOIN users u
-      ON u.id_user = t.id_user
-    WHERE t.id_transaction = ?
-    LIMIT 1
+    t.id_transaction,
+    t.id_store,
+
+    s.id_owner,
+    s.id_business_category,
+
+    s.nama_toko,
+    s.alamat,
+    s.no_hp,
+    s.email,
+    s.logo,
+    s.status_toko,
+
+    t.id_user,
+    u.nama_lengkap AS nama_kasir,
+
+    t.kode_transaksi,
+    t.total_item,
+    t.total_qty,
+    t.subtotal,
+    t.diskon,
+    t.pajak,
+    t.ppn_persen,
+    t.grand_total,
+    t.metode_pembayaran,
+    t.jumlah_bayar,
+    t.kembalian,
+    t.status_transaksi,
+    t.catatan,
+    t.created_at,
+    t.updated_at
+FROM transactions t
+INNER JOIN stores s
+    ON s.id_store = t.id_store
+LEFT JOIN users u
+    ON u.id_user = t.id_user
+WHERE t.id_transaction = ?
+LIMIT 1
     `,
     [id_transaction]
   )
