@@ -621,17 +621,34 @@ const upgradeSubscription = async (
       throw new Error("Masih ada invoice langganan yang pending");
     }
 
-    // Ambil harga paket baru
+    // Ambil data plan baru
     const newPlan = await findPlanById(newPlanId);
 
     if (!newPlan) {
       throw new Error("Plan baru tidak ditemukan");
     }
 
-    const totalHarga = Number(newPlan.harga) * Number(newJumlahBulan);
+    if (newPlan.status_paket !== "aktif") {
+      throw new Error("Plan baru tidak aktif");
+    }
+
+    // =====================================
+    // HITUNG HARGA + DISKON
+    // =====================================
+    const subtotal = Number(newPlan.harga) * Number(newJumlahBulan);
+
+    // Diskon hanya jika 12 bulan
+    const diskonPersen = Number(newJumlahBulan) === 12 ? 10 : 0;
+
+    const diskon = subtotal * (diskonPersen / 100);
+
+    const totalHarga = subtotal - diskon;
+
     const kodeInvoice = await generateInvoiceCode();
 
-    // Buat invoice upgrade
+    // =====================================
+    // BUAT INVOICE UPGRADE
+    // =====================================
     const [result] = await connection.query(
       `
       INSERT INTO subscriptions
@@ -669,15 +686,26 @@ const upgradeSubscription = async (
       id_subscription: result.insertId,
       id_owner: subscription.id_owner,
       id_plan: newPlanId,
+
       jenis: "upgrade",
       parent_subscription: id_subscription,
+
       jumlah_bulan: newJumlahBulan,
-      harga: totalHarga,
+
       kode_invoice: kodeInvoice,
+
+      // Informasi pembayaran
+      subtotal,
+      diskon_persen: diskonPersen,
+      diskon,
+      harga: totalHarga,
+
       status_langganan: "pending",
       metode_pembayaran: "manual_transfer",
+
       is_upgrade: true,
     };
+
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -735,7 +763,7 @@ const extendSubscription = async (
       throw new Error("Subscription sudah expired");
     }
 
-    // Cek invoice pending
+    // Pastikan tidak ada invoice pending
     const [pendingRows] = await connection.query(
       `
       SELECT id_subscription
@@ -751,12 +779,28 @@ const extendSubscription = async (
       throw new Error("Masih ada invoice langganan yang pending");
     }
 
-    const biayaTambahan =
-      Number(subscription.harga_plan) * additionalMonths;
+    // =====================================
+    // HITUNG HARGA + DISKON
+    // =====================================
+    const subtotal =
+      Number(subscription.harga_plan) * Number(additionalMonths);
 
-    const kodeInvoice = await generateInvoiceCode();
+    // Diskon hanya jika extend 12 bulan
+    const diskonPersen =
+      Number(additionalMonths) === 12 ? 10 : 0;
 
-    // Buat invoice extend
+    const diskon =
+      subtotal * (diskonPersen / 100);
+
+    const totalHarga =
+      subtotal - diskon;
+
+    const kodeInvoice =
+      await generateInvoiceCode();
+
+    // =====================================
+    // BUAT INVOICE EXTEND
+    // =====================================
     const [result] = await connection.query(
       `
       INSERT INTO subscriptions
@@ -780,10 +824,10 @@ const extendSubscription = async (
       [
         subscription.id_owner,
         subscription.id_plan,
-        id_subscription, // subscription yang diperpanjang
+        id_subscription,
         additionalMonths,
         kodeInvoice,
-        biayaTambahan,
+        totalHarga,
         catatan ??
           `Perpanjangan paket ${subscription.nama_paket} selama ${additionalMonths} bulan`
       ]
@@ -795,15 +839,26 @@ const extendSubscription = async (
       id_subscription: result.insertId,
       id_owner: subscription.id_owner,
       id_plan: subscription.id_plan,
+
       jenis: "extend",
       parent_subscription: id_subscription,
+
       jumlah_bulan: additionalMonths,
+
       kode_invoice: kodeInvoice,
-      harga: biayaTambahan,
+
+      // Informasi pembayaran
+      subtotal,
+      diskon_persen: diskonPersen,
+      diskon,
+      harga: totalHarga,
+
       status_langganan: "pending",
       metode_pembayaran: "manual_transfer",
+
       is_extend: true
     };
+
   } catch (error) {
     await connection.rollback();
     throw error;
