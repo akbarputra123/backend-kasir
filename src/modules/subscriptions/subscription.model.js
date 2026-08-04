@@ -257,19 +257,37 @@ const createCheckout = async (data) => {
     id_plan,
     jumlah_bulan = 1,
     metode_pembayaran = "manual_transfer",
-    catatan = null
+    catatan = null,
   } = data;
 
   // Ambil data plan
   const plan = await findPlanById(id_plan);
-  if (!plan) throw new Error("Plan tidak ditemukan");
+
+  if (!plan) {
+    throw new Error("Plan tidak ditemukan");
+  }
+
   if (plan.status_paket !== "aktif") {
     throw new Error("Plan tidak aktif");
   }
 
-  const totalHarga = plan.harga * jumlah_bulan;
+  // ==========================
+  // HITUNG HARGA
+  // ==========================
+  const subtotal = Number(plan.harga) * Number(jumlah_bulan);
+
+  // Diskon hanya untuk langganan 12 bulan
+  const diskonPersen = jumlah_bulan === 12 ? 10 : 0;
+
+  const diskon = subtotal * (diskonPersen / 100);
+
+  const totalHarga = subtotal - diskon;
+
   const kodeInvoice = await generateInvoiceCode();
 
+  // ==========================
+  // SIMPAN KE DATABASE
+  // ==========================
   const [result] = await pool.query(
     `
     INSERT INTO subscriptions
@@ -298,19 +316,29 @@ const createCheckout = async (data) => {
       kodeInvoice,
       totalHarga,
       metode_pembayaran,
-      catatan
+      catatan,
     ]
   );
 
+  // ==========================
+  // RESPONSE KE FRONTEND
+  // ==========================
   return {
     id_subscription: result.insertId,
     id_owner,
     id_plan,
     jenis: "checkout",
     parent_subscription: null,
+
     jumlah_bulan,
+
     kode_invoice: kodeInvoice,
-    harga: totalHarga,
+
+    subtotal,
+    diskon_persen: diskonPersen,
+    diskon,
+    harga: totalHarga, // total setelah diskon
+
     status_langganan: "pending",
     metode_pembayaran,
   };
