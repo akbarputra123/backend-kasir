@@ -526,6 +526,36 @@ const generateInvoiceCode = (prefix = 'INV-FREE') => {
 
 /*
 |--------------------------------------------------------------------------
+| CEK LANGGANAN OWNER AKTIF
+|--------------------------------------------------------------------------
+*/
+const findActiveSubscriptionByStore = async (idStore) => {
+  const [rows] = await pool.query(
+    `
+    SELECT
+      s.id_subscription,
+      s.status_langganan,
+      s.tanggal_berakhir
+    FROM stores st
+    INNER JOIN subscriptions s
+      ON s.id_owner = st.id_owner
+    WHERE st.id_store = ?
+      AND s.status_langganan = 'aktif'
+      AND (
+            s.tanggal_berakhir IS NULL
+            OR s.tanggal_berakhir >= NOW()
+          )
+    ORDER BY s.tanggal_berakhir DESC
+    LIMIT 1
+    `,
+    [idStore]
+  )
+
+  return rows[0] || null
+}
+
+/*
+|--------------------------------------------------------------------------
 | EXPORT SEMUA FUNGSI
 |--------------------------------------------------------------------------
 */
@@ -567,5 +597,6 @@ module.exports = {
   ensureFreePlan,
   findActiveSubscriptionByOwner,
   createSubscription,
+  findActiveSubscriptionByStore,
   generateInvoiceCode
 }

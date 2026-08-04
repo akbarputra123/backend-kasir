@@ -379,29 +379,28 @@ const login = async (data = {}) => {
 
   // Validasi password
   const isPasswordValid = await bcrypt.compare(password, user.password)
+
   if (!isPasswordValid) {
     throw new Error("Username/email atau password salah")
   }
 
   // Normalisasi role
   const role = normalizeRole(user.role)
+
   if (!role) {
     throw new Error("Role user tidak valid.")
   }
 
   /*
   |--------------------------------------------------------------------------
-  | VALIDASI EMAIL (kecuali super_admin)
+  | VALIDASI EMAIL
   |--------------------------------------------------------------------------
   */
-  if (role === "owner" && !user.email_verified_at) {
-    throw new Error("Email belum diverifikasi. Silakan periksa email atau kirim ulang email aktivasi.")
-  }
 
-  // Super_admin TIDAK perlu verifikasi email
-  if (role === "super_admin") {
-    // Super_admin tidak perlu verifikasi email dan tidak perlu toko
-    // Lanjutkan tanpa validasi toko
+  if (role === "owner" && !user.email_verified_at) {
+    throw new Error(
+      "Email belum diverifikasi. Silakan periksa email atau kirim ulang email aktivasi."
+    )
   }
 
   /*
@@ -409,42 +408,82 @@ const login = async (data = {}) => {
   | VALIDASI STATUS AKUN
   |--------------------------------------------------------------------------
   */
+
   if (user.status_akun !== "aktif") {
     throw new Error("Akun Anda sedang nonaktif.")
   }
 
   /*
   |--------------------------------------------------------------------------
-  | VALIDASI TOKO (kecuali super_admin)
+  | VALIDASI TOKO
   |--------------------------------------------------------------------------
   */
- if (role !== "super_admin") {
-  // Semua role selain super_admin harus punya toko
-  // kecuali owner (owner boleh belum punya toko)
-  if (!user.id_store && (role === "admin" || role === "kasir")) {
-    throw new Error("Akun belum terhubung dengan toko.");
+
+  if (role !== "super_admin") {
+    // Admin & kasir wajib memiliki toko
+    if (!user.id_store && (role === "admin" || role === "kasir")) {
+      throw new Error("Akun belum terhubung dengan toko.")
+    }
+
+    // Admin & kasir tidak boleh login jika toko nonaktif
+    if (
+      user.id_store &&
+      user.status_toko !== "aktif" &&
+      (role === "admin" || role === "kasir")
+    ) {
+      throw new Error("Toko sedang nonaktif.")
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDASI LANGGANAN OWNER
+    |--------------------------------------------------------------------------
+    | Owner tetap boleh login walaupun langganan habis.
+    | Admin & Kasir tidak boleh login jika owner tidak memiliki
+    | langganan aktif atau sudah expired.
+    |--------------------------------------------------------------------------
+    */
+
+    if (role === "admin" || role === "kasir") {
+      const subscription =
+        await authModel.findActiveSubscriptionByStore(user.id_store)
+
+      if (!subscription) {
+        throw new Error(
+          "Owner toko tidak memiliki langganan aktif atau masa langganan telah berakhir."
+        )
+      }
+    }
   }
 
-  // Toko nonaktif hanya memblokir admin & kasir
-  if (
-    user.id_store &&
-    user.status_toko !== "aktif" &&
-    (role === "admin" || role === "kasir")
-  ) {
-    throw new Error("Toko sedang nonaktif.");
-  }
-}
+  /*
+  |--------------------------------------------------------------------------
+  | UPDATE LAST LOGIN
+  |--------------------------------------------------------------------------
+  */
 
   await authModel.updateLastLogin(user.id_user)
 
+  /*
+  |--------------------------------------------------------------------------
+  | GENERATE TOKEN
+  |--------------------------------------------------------------------------
+  */
+
   const token = generateToken({
     id_user: user.id_user,
-    id_store: user.id_store, // super_admin bisa null
+    id_store: user.id_store,
     nama_lengkap: user.nama_lengkap,
     username: user.username,
     email: user.email,
     role
   })
+
+  /*
+  |--------------------------------------------------------------------------
+  | RESPONSE
+  |--------------------------------------------------------------------------
+  */
 
   return {
     token,
