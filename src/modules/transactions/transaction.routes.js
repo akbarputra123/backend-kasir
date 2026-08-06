@@ -79,13 +79,17 @@ router.get(
   authorizeRoles("owner", "admin", "kasir"),
   getTransactionById
 )
-
 /**
  * @swagger
  * /transactions:
  *   post:
  *     summary: Buat transaksi kasir
- *     description: Membuat transaksi baru. Diskon produk dihitung otomatis dari data produk dan tabel discounts. PPN dihitung otomatis dari pengaturan toko pada stores.ppn_aktif dan stores.ppn_persen. Sistem juga menyimpan item transaksi, mengurangi stok produk, dan membuat stock_logs otomatis.
+ *     description: >
+ *       Membuat transaksi baru. Sistem akan menghitung diskon produk,
+ *       tambahan harga varian (Coffee Shop), PPN toko, dan grand total secara otomatis.
+ *       Untuk produk yang memiliki varian, kirimkan daftar id_variant_option
+ *       pada field variant_options. Untuk produk tanpa varian (Retail),
+ *       field variant_options boleh dikosongkan atau tidak dikirim.
  *     tags:
  *       - Transactions
  *     security:
@@ -104,7 +108,8 @@ router.get(
  *                 type: integer
  *                 nullable: true
  *                 example: 1
- *                 description: Wajib untuk owner. Admin/kasir otomatis memakai id_store dari token.
+ *                 description: Wajib untuk owner. Admin dan kasir otomatis menggunakan toko dari token login.
+ *
  *               items:
  *                 type: array
  *                 description: Daftar produk yang dibeli.
@@ -116,26 +121,88 @@ router.get(
  *                   properties:
  *                     id_product:
  *                       type: integer
- *                       example: 1
+ *                       example: 10
+ *                       description: ID produk
+ *
  *                     qty:
  *                       type: integer
  *                       example: 2
+ *                       description: Jumlah pembelian
+ *
+ *                     variant_options:
+ *                       type: array
+ *                       nullable: true
+ *                       description: >
+ *                         Daftar ID option varian yang dipilih.
+ *                         Opsional. Digunakan untuk Coffee Shop/Kedai.
+ *                         Retail tidak perlu mengirim field ini.
+ *                       items:
+ *                         type: integer
+ *                       example:
+ *                         - 3
+ *                         - 7
+ *
  *               metode_pembayaran:
  *                 type: string
- *                 enum: [tunai, transfer, qris, debit, ewallet]
+ *                 enum:
+ *                   - tunai
+ *                   - transfer
+ *                   - qris
+ *                   - debit
+ *                   - ewallet
  *                 example: tunai
+ *
  *               jumlah_bayar:
  *                 type: number
- *                 example: 20000
+ *                 example: 50000
+ *
  *               catatan:
  *                 type: string
  *                 nullable: true
- *                 example: Pembelian normal
+ *                 example: Pembelian Coffee Shop
+ *
+ *           examples:
+ *
+ *             retail:
+ *               summary: Contoh transaksi Retail
+ *               value:
+ *                 id_store: 1
+ *                 items:
+ *                   - id_product: 1
+ *                     qty: 2
+ *                   - id_product: 5
+ *                     qty: 1
+ *                 metode_pembayaran: tunai
+ *                 jumlah_bayar: 100000
+ *                 catatan: Pembelian retail
+ *
+ *             coffee_shop:
+ *               summary: Contoh transaksi Coffee Shop
+ *               value:
+ *                 id_store: 1
+ *                 items:
+ *                   - id_product: 10
+ *                     qty: 1
+ *                     variant_options:
+ *                       - 3
+ *                       - 7
+ *                       - 10
+ *                 metode_pembayaran: qris
+ *                 jumlah_bayar: 50000
+ *                 catatan: Latte Large Ice Extra Shot
+ *
  *     responses:
  *       201:
  *         description: Transaksi berhasil disimpan
+ *
  *       400:
- *         description: Gagal menyimpan transaksi
+ *         description: Validasi gagal
+ *
+ *       401:
+ *         description: Token tidak valid
+ *
+ *       403:
+ *         description: Tidak memiliki akses
  */
 router.post(
   "/",

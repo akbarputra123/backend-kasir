@@ -1,6 +1,6 @@
 const transactionModel = require("./transaction.model")
 const productModel = require("../products/product.model")
-
+const variantModel = require("../variant/variant.model")
 /*
 |--------------------------------------------------------------------------
 | GET ALL TRANSACTIONS
@@ -150,6 +150,64 @@ const calculateProductDiscount = (product) => {
 
 /*
 |--------------------------------------------------------------------------
+| VALIDATE PRODUCT VARIANTS
+|--------------------------------------------------------------------------
+*/
+const validateProductVariants = async (
+  product,
+  variantOptions = []
+) => {
+  if (!Array.isArray(variantOptions) || variantOptions.length === 0) {
+    return {
+      variants: [],
+      tambahanHarga: 0
+    }
+  }
+
+  const variants = []
+  let tambahanHarga = 0
+
+  for (const idVariantOption of variantOptions) {
+    const option =
+      await variantModel.findOptionById(idVariantOption)
+
+    if (!option) {
+      throw new Error(
+        `Varian dengan ID ${idVariantOption} tidak ditemukan`
+      )
+    }
+
+    // Pastikan option milik produk yang dipilih
+    if (Number(option.id_product) !== Number(product.id_product)) {
+      throw new Error(
+        `Varian ${option.nama_option} bukan milik produk ${product.nama_produk}`
+      )
+    }
+
+    if (option.status_option !== "aktif") {
+      throw new Error(
+        `Varian ${option.nama_option} sedang nonaktif`
+      )
+    }
+
+    tambahanHarga += Number(option.tambahan_harga || 0)
+
+    variants.push({
+      id_variant_option: option.id_variant_option,
+      nama_group: option.nama_group,
+      nama_option: option.nama_option,
+      tambahan_harga: Number(option.tambahan_harga || 0)
+    })
+  }
+
+  return {
+    variants,
+    tambahanHarga
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
 | CREATE TRANSACTION
 |--------------------------------------------------------------------------
 */
@@ -260,6 +318,7 @@ const createTransaction = async (data, currentUser) => {
     }
 
     const product = await productModel.findById(item.id_product)
+    const variantResult =await validateProductVariants(product,item.variant_options || [])
 
     if (!product) {
       throw new Error("Produk tidak ditemukan")
@@ -305,10 +364,9 @@ const createTransaction = async (data, currentUser) => {
     const diskonSatuan = Number(
       discountResult.diskon_satuan || 0
     )
-
-    const hargaFinal = Number(
-      discountResult.harga_final || 0
-    )
+const hargaFinal =
+  Number(discountResult.harga_final || 0) +
+  Number(variantResult.tambahanHarga || 0)
 
     const subtotalItemAsli = hargaAsli * qty
     const totalDiskonItem = diskonSatuan * qty

@@ -142,7 +142,10 @@ LIMIT 1
 |--------------------------------------------------------------------------
 */
 const findItemsByTransactionId = async (id_transaction) => {
-  const [rows] = await pool.query(
+  // =====================================================
+  // AMBIL ITEM TRANSAKSI
+  // =====================================================
+  const [items] = await pool.query(
     `
     SELECT
       id_transaction_item,
@@ -167,9 +170,61 @@ const findItemsByTransactionId = async (id_transaction) => {
     [id_transaction]
   )
 
-  return rows
-}
+  if (!items.length) {
+    return []
+  }
 
+  // =====================================================
+  // AMBIL SEMUA VARIAN SEKALIGUS
+  // =====================================================
+  const ids = items.map(item => item.id_transaction_item)
+
+  const placeholders = ids.map(() => "?").join(",")
+
+  const [variants] = await pool.query(
+    `
+    SELECT
+      id_transaction_item,
+      id_variant_option,
+      nama_group,
+      nama_option,
+      tambahan_harga
+    FROM transaction_item_variants
+    WHERE id_transaction_item IN (${placeholders})
+    ORDER BY id_transaction_item ASC
+    `,
+    ids
+  )
+
+  // =====================================================
+  // GROUP VARIAN BERDASARKAN ITEM
+  // =====================================================
+  const variantMap = {}
+
+  for (const variant of variants) {
+    if (!variantMap[variant.id_transaction_item]) {
+      variantMap[variant.id_transaction_item] = []
+    }
+
+    variantMap[variant.id_transaction_item].push({
+      id_variant_option: variant.id_variant_option,
+      nama_group: variant.nama_group,
+      nama_option: variant.nama_option,
+      tambahan_harga: Number(
+        variant.tambahan_harga || 0
+      )
+    })
+  }
+
+  // =====================================================
+  // GABUNGKAN KE ITEM
+  // =====================================================
+  return items.map(item => ({
+    ...item,
+    variants:
+      variantMap[item.id_transaction_item] || []
+  }))
+}
 /*
 |--------------------------------------------------------------------------
 | FIND STORE BY ID AND OWNER
@@ -318,8 +373,12 @@ const createTransaction = async (data) => {
 
     const idTransaction = trxResult.insertId
 
+    // =====================================================
+    // SIMPAN ITEM TRANSAKSI
+    // =====================================================
+
     for (const item of data.items) {
-      await connection.query(
+      const [itemResult] = await connection.query(
         `
         INSERT INTO transaction_items
         (
@@ -340,25 +399,60 @@ const createTransaction = async (data) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
-  idTransaction,
-  item.id_product,
+          idTransaction,
+          item.id_product,
 
-  item.kode_produk || "",
-  item.nama_produk || "",
+          item.kode_produk || "",
+          item.nama_produk || "",
 
-  Number(item.harga_asli || 0),
+          Number(item.harga_asli || 0),
 
-  item.id_discount || null,
-  item.nama_diskon || null,
-  item.tipe_diskon || null,
-  Number(item.nilai_diskon || 0),
-  Number(item.diskon || 0),
+          item.id_discount || null,
+          item.nama_diskon || null,
+          item.tipe_diskon || null,
 
-  Number(item.harga_jual || 0),
-  Number(item.qty || 1),
-  Number(item.subtotal || 0)
-]
+          Number(item.nilai_diskon || 0),
+          Number(item.diskon || 0),
+
+          Number(item.harga_jual || 0),
+          Number(item.qty || 1),
+          Number(item.subtotal || 0)
+        ]
       )
+
+      const idTransactionItem = itemResult.insertId
+
+      // =====================================================
+      // SIMPAN VARIAN
+      // =====================================================
+
+      if (
+        Array.isArray(item.variants) &&
+        item.variants.length > 0
+      ) {
+        for (const variant of item.variants) {
+          await connection.query(
+            `
+            INSERT INTO transaction_item_variants
+            (
+              id_transaction_item,
+              id_variant_option,
+              nama_group,
+              nama_option,
+              tambahan_harga
+            )
+            VALUES (?, ?, ?, ?, ?)
+            `,
+            [
+              idTransactionItem,
+              variant.id_variant_option,
+              variant.nama_group,
+              variant.nama_option,
+              Number(variant.tambahan_harga || 0)
+            ]
+          )
+        }
+      }
     }
 
     await connection.commit()
@@ -374,7 +468,6 @@ const createTransaction = async (data) => {
     connection.release()
   }
 }
-
 /*
 |--------------------------------------------------------------------------
 | CANCEL TRANSACTION
