@@ -11,6 +11,7 @@ const dashboardRoutes = require("../modules/dashboard/dashboard.routes")
 const receiptRoutes = require("../modules/receipts/receipt.routes")
 const subscriptionRoutes = require("../modules/subscriptions/subscription.routes")
 const discountRoutes = require("../modules/discounts/discount.routes")
+const variantRoutes = require("../modules/variant/variant.route") // Tambahkan ini
 const router = express.Router()
 
 /**
@@ -63,5 +64,6 @@ router.use("/dashboard", dashboardRoutes)
 router.use("/receipts", receiptRoutes)
 router.use("/subscriptions", subscriptionRoutes)
 router.use("/discounts", discountRoutes)
+router.use("/variants", variantRoutes) // Tambahkan ini
 
 module.exports = router

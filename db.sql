@@ -229,6 +229,54 @@ CREATE TABLE products (
     INDEX idx_category (id_category),
     INDEX idx_status (status_produk)
 );
+
+CREATE TABLE variant_groups (
+    id_variant_group INT AUTO_INCREMENT PRIMARY KEY,
+
+    id_product INT NOT NULL,
+
+    nama_group VARCHAR(100) NOT NULL,
+
+    min_select INT NOT NULL DEFAULT 1,
+    max_select INT NOT NULL DEFAULT 1,
+
+    status_group ENUM('aktif','nonaktif')
+        NOT NULL DEFAULT 'aktif',
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_variant_groups_product
+        FOREIGN KEY (id_product)
+        REFERENCES products(id_product)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE variant_options (
+    id_variant_option INT AUTO_INCREMENT PRIMARY KEY,
+
+    id_variant_group INT NOT NULL,
+
+    nama_option VARCHAR(100) NOT NULL,
+
+    tambahan_harga DECIMAL(15,2)
+        NOT NULL DEFAULT 0,
+
+    status_option ENUM('aktif','nonaktif')
+        NOT NULL DEFAULT 'aktif',
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_variant_options_group
+        FOREIGN KEY (id_variant_group)
+        REFERENCES variant_groups(id_variant_group)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
 CREATE TABLE stock_logs (
     id_stock_log INT AUTO_INCREMENT PRIMARY KEY,
 
@@ -345,6 +393,34 @@ CREATE TABLE transaction_items (
     CONSTRAINT fk_transaction_items_discount
         FOREIGN KEY (id_discount)
         REFERENCES discounts(id_discount)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE transaction_item_variants (
+    id_transaction_item_variant INT AUTO_INCREMENT PRIMARY KEY,
+
+    id_transaction_item INT NOT NULL,
+
+    id_variant_option INT NULL,
+
+    nama_group VARCHAR(100) NOT NULL,
+    nama_option VARCHAR(100) NOT NULL,
+
+    tambahan_harga DECIMAL(15,2)
+        NOT NULL DEFAULT 0,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_transaction_item_variants_item
+        FOREIGN KEY (id_transaction_item)
+        REFERENCES transaction_items(id_transaction_item)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_transaction_item_variants_option
+        FOREIGN KEY (id_variant_option)
+        REFERENCES variant_options(id_variant_option)
         ON DELETE SET NULL
         ON UPDATE CASCADE
 );
