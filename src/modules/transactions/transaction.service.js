@@ -367,6 +367,8 @@ const createTransaction = async (data, currentUser) => {
 const hargaFinal =
   Number(discountResult.harga_final || 0) +
   Number(variantResult.tambahanHarga || 0)
+  console.log("VARIANT RESULT");
+console.log(variantResult);
 
     const subtotalItemAsli = hargaAsli * qty
     const totalDiskonItem = diskonSatuan * qty
