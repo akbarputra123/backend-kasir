@@ -374,27 +374,29 @@ console.log(variantResult);
     const totalDiskonItem = diskonSatuan * qty
     const subtotalItemFinal = hargaFinal * qty
 
-    normalizedItems.push({
-      id_product: product.id_product,
+   normalizedItems.push({
+  id_product: product.id_product,
 
-      // WAJIB
-      kode_produk: product.kode_produk || "",
-      nama_produk: product.nama_produk,
+  kode_produk: product.kode_produk || "",
+  nama_produk: product.nama_produk,
 
-      qty,
+  qty,
 
-      harga_asli: hargaAsli,
+  harga_asli: hargaAsli,
 
-      id_discount: discountResult.id_discount,
-      nama_diskon: discountResult.nama_diskon,
-      tipe_diskon: discountResult.tipe_diskon,
-      nilai_diskon: discountResult.nilai_diskon,
+  id_discount: discountResult.id_discount,
+  nama_diskon: discountResult.nama_diskon,
+  tipe_diskon: discountResult.tipe_diskon,
+  nilai_diskon: discountResult.nilai_diskon,
 
-      diskon: totalDiskonItem,
+  diskon: totalDiskonItem,
 
-      harga_jual: hargaFinal,
-      subtotal: subtotalItemFinal
-    })
+  harga_jual: hargaFinal,
+  subtotal: subtotalItemFinal,
+
+  // WAJIB
+  variants: variantResult.variants
+})
 
     subtotalAsli += subtotalItemAsli
     totalDiskonProduk += totalDiskonItem
