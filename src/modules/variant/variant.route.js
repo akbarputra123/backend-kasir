@@ -55,7 +55,7 @@ router.get(
   "/product/:id_product",
   authMiddleware,
   subscriptionMiddleware,
-  authorizeRoles("owner", "admin"),
+  authorizeRoles("owner", "admin", "kasir"),
   variantController.getGroupsByProduct
 )
 
