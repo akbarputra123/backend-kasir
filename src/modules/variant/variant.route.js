@@ -28,7 +28,7 @@ const {
 
 /**
  * @swagger
- * /api/variants/product/{id_product}:
+ * /variants/product/{id_product}:
  *   get:
  *     summary: Ambil seluruh group beserta option varian berdasarkan produk
  *     tags: [Variants]
@@ -61,7 +61,7 @@ router.get(
 
 /**
  * @swagger
- * /api/variants/group:
+ * /variants/group:
  *   post:
  *     summary: Tambah group varian
  *     tags: [Variants]
@@ -115,7 +115,7 @@ router.post(
 
 /**
  * @swagger
- * /api/variants/group/{id_variant_group}:
+ * /variants/group/{id_variant_group}:
  *   put:
  *     summary: Update group varian
  *     tags: [Variants]
@@ -170,7 +170,7 @@ router.put(
 
 /**
  * @swagger
- * /api/variants/group/{id_variant_group}:
+ * /variants/group/{id_variant_group}:
  *   delete:
  *     summary: Hapus group varian
  *     tags: [Variants]
@@ -209,7 +209,7 @@ router.delete(
 
 /**
  * @swagger
- * /api/variants/option:
+ * /variants/option:
  *   post:
  *     summary: Tambah option varian
  *     tags: [Variants]
@@ -260,7 +260,7 @@ router.post(
 
 /**
  * @swagger
- * /api/variants/option/{id_variant_option}:
+ * /variants/option/{id_variant_option}:
  *   put:
  *     summary: Update option varian
  *     tags: [Variants]
@@ -312,7 +312,7 @@ router.put(
 
 /**
  * @swagger
- * /api/variants/option/{id_variant_option}:
+ * /variants/option/{id_variant_option}:
  *   delete:
  *     summary: Hapus option varian
  *     tags: [Variants]
