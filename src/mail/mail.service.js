@@ -1,4 +1,3 @@
-
 const {
   transporter
 } = require("./mail.config")
@@ -54,7 +53,8 @@ const normalizeEmail = (email) => {
 |--------------------------------------------------------------------------
 */
 const validateEmail = (email) => {
-  const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  const pattern =
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
   return pattern.test(email)
 }
@@ -63,10 +63,10 @@ const validateEmail = (email) => {
 |--------------------------------------------------------------------------
 | GET PUBLIC API URL
 |--------------------------------------------------------------------------
-| APP_URL wajib berupa URL backend publik.
+| APP_URL harus berupa URL backend publik.
 |
-| Contoh:
-| APP_URL=http://76.13.197.9:2000/api
+| Production:
+| APP_URL=https://api.kasir.siodev.sbs/api
 |--------------------------------------------------------------------------
 */
 const getPublicApiUrl = () => {
@@ -98,21 +98,23 @@ const getPublicApiUrl = () => {
 |--------------------------------------------------------------------------
 | VALIDATE MAIL RESULT
 |--------------------------------------------------------------------------
-| Memastikan alamat penerima diterima oleh server SMTP.
-|--------------------------------------------------------------------------
 */
 const validateMailResult = ({
   result,
   recipient,
   mailType
 }) => {
-  const accepted = Array.isArray(result.accepted)
+  const accepted = Array.isArray(
+    result.accepted
+  )
     ? result.accepted.map((item) =>
         normalizeEmail(item)
       )
     : []
 
-  const rejected = Array.isArray(result.rejected)
+  const rejected = Array.isArray(
+    result.rejected
+  )
     ? result.rejected.map((item) =>
         normalizeEmail(item)
       )
@@ -122,21 +124,34 @@ const validateMailResult = ({
     normalizeEmail(recipient)
 
   const recipientAccepted =
-    accepted.includes(normalizedRecipient)
+    accepted.includes(
+      normalizedRecipient
+    )
 
   const recipientRejected =
-    rejected.includes(normalizedRecipient)
+    rejected.includes(
+      normalizedRecipient
+    )
 
   console.log("")
-  console.log("==============================================")
-  console.log(`📧 HASIL PENGIRIMAN ${mailType}`)
-  console.log("==============================================")
+  console.log(
+    "=============================================="
+  )
+  console.log(
+    `📧 HASIL PENGIRIMAN ${mailType}`
+  )
+  console.log(
+    "=============================================="
+  )
+
   console.log(
     `Message ID : ${result.messageId || "-"}`
   )
+
   console.log(
     `Tujuan     : ${normalizedRecipient}`
   )
+
   console.log(
     `Accepted   : ${
       accepted.length > 0
@@ -144,6 +159,7 @@ const validateMailResult = ({
         : "-"
     }`
   )
+
   console.log(
     `Rejected   : ${
       rejected.length > 0
@@ -151,22 +167,39 @@ const validateMailResult = ({
         : "-"
     }`
   )
+
   console.log(
-    `Response   : ${result.response || "-"}`
+    `Response   : ${
+      result.response || "-"
+    }`
   )
+
   console.log(
     "Envelope   :",
     result.envelope || "-"
   )
-  console.log("==============================================")
+
+  console.log(
+    "=============================================="
+  )
   console.log("")
 
+  /*
+  |--------------------------------------------------------------------------
+  | SMTP MENOLAK PENERIMA
+  |--------------------------------------------------------------------------
+  */
   if (recipientRejected) {
     throw new Error(
       `Email tujuan ditolak oleh server SMTP: ${normalizedRecipient}`
     )
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | SMTP TIDAK MENERIMA PENERIMA
+  |--------------------------------------------------------------------------
+  */
   if (!recipientAccepted) {
     throw new Error(
       `Server SMTP tidak menerima email tujuan: ${normalizedRecipient}`
@@ -176,8 +209,11 @@ const validateMailResult = ({
   return {
     accepted,
     rejected,
-    response: result.response || null,
-    message_id: result.messageId || null
+    response:
+      result.response || null,
+
+    message_id:
+      result.messageId || null
   }
 }
 
@@ -185,7 +221,7 @@ const validateMailResult = ({
 |--------------------------------------------------------------------------
 | SEND VERIFICATION EMAIL
 |--------------------------------------------------------------------------
-| Mengirim tautan aktivasi akun.
+| Mengirim email aktivasi akun.
 |--------------------------------------------------------------------------
 */
 const sendVerificationEmail = async ({
@@ -193,14 +229,23 @@ const sendVerificationEmail = async ({
   nama_lengkap,
   token
 }) => {
-  const recipient = normalizeEmail(email)
+  const recipient =
+    normalizeEmail(email)
 
-  const name = String(
-    nama_lengkap || "Pengguna SIOPOS"
-  ).trim()
+  const name =
+    String(
+      nama_lengkap ||
+        "Pengguna SIOPOS"
+    ).trim()
 
-  const rawToken = String(token || "").trim()
+  const rawToken =
+    String(token || "").trim()
 
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDATE RECIPIENT
+  |--------------------------------------------------------------------------
+  */
   if (!recipient) {
     throw new Error(
       "Email penerima aktivasi wajib diisi"
@@ -213,74 +258,208 @@ const sendVerificationEmail = async ({
     )
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDATE TOKEN
+  |--------------------------------------------------------------------------
+  */
   if (!rawToken) {
     throw new Error(
       "Token aktivasi tidak ditemukan"
     )
   }
 
-  const appUrl = getPublicApiUrl()
+  try {
+    /*
+    |--------------------------------------------------------------------------
+    | PUBLIC API URL
+    |--------------------------------------------------------------------------
+    */
+    const appUrl =
+      getPublicApiUrl()
 
-  const verificationUrl =
-    `${appUrl}/auth/verify-email` +
-    `?token=${encodeURIComponent(rawToken)}`
+    /*
+    |--------------------------------------------------------------------------
+    | VERIFICATION URL
+    |--------------------------------------------------------------------------
+    */
+    const verificationUrl =
+      `${appUrl}/auth/verify-email` +
+      `?token=${encodeURIComponent(
+        rawToken
+      )}`
 
-  const template =
-    getVerificationEmailTemplate({
-      nama_lengkap: name,
-      verificationUrl
-    })
-
-  if (
-    !template ||
-    !template.subject ||
-    !template.html
-  ) {
-    throw new Error(
-      "Template email aktivasi tidak valid"
+    console.log("")
+    console.log(
+      "=============================================="
     )
-  }
+    console.log(
+      "📧 PERSIAPAN EMAIL AKTIVASI"
+    )
+    console.log(
+      "=============================================="
+    )
 
-  const result = await transporter.sendMail({
-    from: getSender(),
-    to: recipient,
+    console.log(
+      `Penerima : ${recipient}`
+    )
 
-    replyTo:
-      process.env.MAIL_FROM_ADDRESS ||
-      process.env.MAIL_USER,
+    console.log(
+      `Nama     : ${name}`
+    )
 
-    subject: template.subject,
+    console.log(
+      `URL      : ${verificationUrl}`
+    )
 
-    text:
-      template.text ||
-      (
-        `Halo ${name},\n\n` +
-        `Aktifkan akun SIOPOS melalui tautan berikut:\n` +
-        `${verificationUrl}`
-      ),
+    console.log(
+      "=============================================="
+    )
+    console.log("")
 
-    html: template.html,
+    /*
+    |--------------------------------------------------------------------------
+    | GET TEMPLATE
+    |--------------------------------------------------------------------------
+    */
+    const template =
+      getVerificationEmailTemplate({
+        nama_lengkap: name,
+        verificationUrl
+      })
 
-    headers: {
-      "X-Mailer": "SIOPOS Backend",
-      "X-Application": "SIOPOS",
-      "X-Priority": "3"
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATE TEMPLATE
+    |--------------------------------------------------------------------------
+    */
+    if (
+      !template ||
+      !template.subject ||
+      !template.html
+    ) {
+      throw new Error(
+        "Template email aktivasi tidak valid"
+      )
     }
-  })
 
-  const mailResult = validateMailResult({
-    result,
-    recipient,
-    mailType: "EMAIL AKTIVASI"
-  })
+    /*
+    |--------------------------------------------------------------------------
+    | GET SENDER
+    |--------------------------------------------------------------------------
+    */
+    const sender =
+      getSender()
 
-  return {
-    success: true,
-    email: recipient,
-    message_id: mailResult.message_id,
-    accepted: mailResult.accepted,
-    rejected: mailResult.rejected,
-    response: mailResult.response
+    /*
+    |--------------------------------------------------------------------------
+    | SEND EMAIL
+    |--------------------------------------------------------------------------
+    */
+    const result =
+      await transporter.sendMail({
+        from: sender,
+
+        to: recipient,
+
+        replyTo:
+          process.env
+            .MAIL_FROM_ADDRESS ||
+          process.env.MAIL_USER,
+
+        subject:
+          template.subject,
+
+        text:
+          template.text ||
+          (
+            `Halo ${name},\n\n` +
+            `Akun SIOPOS Anda berhasil dibuat.\n\n` +
+            `Aktifkan akun melalui tautan berikut:\n` +
+            `${verificationUrl}`
+          ),
+
+        html:
+          template.html
+      })
+
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATE SMTP RESULT
+    |--------------------------------------------------------------------------
+    */
+    const mailResult =
+      validateMailResult({
+        result,
+        recipient,
+        mailType:
+          "EMAIL AKTIVASI"
+      })
+
+    return {
+      success: true,
+
+      email: recipient,
+
+      message_id:
+        mailResult.message_id,
+
+      accepted:
+        mailResult.accepted,
+
+      rejected:
+        mailResult.rejected,
+
+      response:
+        mailResult.response
+    }
+  } catch (error) {
+    /*
+    |--------------------------------------------------------------------------
+    | ERROR LOG
+    |--------------------------------------------------------------------------
+    */
+    console.error("")
+    console.error(
+      "=============================================="
+    )
+
+    console.error(
+      "❌ GAGAL MENGIRIM EMAIL AKTIVASI"
+    )
+
+    console.error(
+      "=============================================="
+    )
+
+    console.error(
+      `Penerima : ${recipient}`
+    )
+
+    console.error(
+      `Error    : ${
+        error.message || error
+      }`
+    )
+
+    if (error.code) {
+      console.error(
+        `Code     : ${error.code}`
+      )
+    }
+
+    if (error.response) {
+      console.error(
+        `Response : ${error.response}`
+      )
+    }
+
+    console.error(
+      "=============================================="
+    )
+    console.error("")
+
+    throw error
   }
 }
 
@@ -288,12 +467,7 @@ const sendVerificationEmail = async ({
 |--------------------------------------------------------------------------
 | SEND RESET PASSWORD OTP
 |--------------------------------------------------------------------------
-| Mengirim kode OTP 6 digit untuk reset password.
-|
-| Parameter yang diterima:
-| - email
-| - nama_lengkap
-| - otp
+| Mengirim kode OTP 6 digit.
 |--------------------------------------------------------------------------
 */
 const sendResetPasswordEmail = async ({
@@ -301,14 +475,23 @@ const sendResetPasswordEmail = async ({
   nama_lengkap,
   otp
 }) => {
-  const recipient = normalizeEmail(email)
+  const recipient =
+    normalizeEmail(email)
 
-  const name = String(
-    nama_lengkap || "Pengguna SIOPOS"
-  ).trim()
+  const name =
+    String(
+      nama_lengkap ||
+        "Pengguna SIOPOS"
+    ).trim()
 
-  const otpValue = String(otp || "").trim()
+  const otpValue =
+    String(otp || "").trim()
 
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDATE RECIPIENT
+  |--------------------------------------------------------------------------
+  */
   if (!recipient) {
     throw new Error(
       "Email penerima reset password wajib diisi"
@@ -321,6 +504,11 @@ const sendResetPasswordEmail = async ({
     )
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDATE OTP
+  |--------------------------------------------------------------------------
+  */
   if (!otpValue) {
     throw new Error(
       "Kode OTP reset password tidak ditemukan"
@@ -333,67 +521,159 @@ const sendResetPasswordEmail = async ({
     )
   }
 
-  const template =
-    getResetPasswordEmailTemplate({
-      nama_lengkap: name,
-      otp: otpValue
-    })
+  try {
+    /*
+    |--------------------------------------------------------------------------
+    | GET TEMPLATE
+    |--------------------------------------------------------------------------
+    */
+    const template =
+      getResetPasswordEmailTemplate({
+        nama_lengkap: name,
+        otp: otpValue
+      })
 
-  if (
-    !template ||
-    !template.subject ||
-    !template.html
-  ) {
-    throw new Error(
-      "Template email OTP reset password tidak valid"
-    )
-  }
-
-  const result = await transporter.sendMail({
-    from: getSender(),
-    to: recipient,
-
-    replyTo:
-      process.env.MAIL_FROM_ADDRESS ||
-      process.env.MAIL_USER,
-
-    subject: template.subject,
-
-    text:
-      template.text ||
-      (
-        `Halo ${name},\n\n` +
-        `Kode OTP reset password SIOPOS Anda adalah:\n\n` +
-        `${otpValue}\n\n` +
-        `Kode berlaku selama 10 menit.\n` +
-        `Jangan berikan kode OTP kepada siapa pun.`
-      ),
-
-    html: template.html,
-
-    headers: {
-      "X-Mailer": "SIOPOS Backend",
-      "X-Application": "SIOPOS",
-      "X-Priority": "3"
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATE TEMPLATE
+    |--------------------------------------------------------------------------
+    */
+    if (
+      !template ||
+      !template.subject ||
+      !template.html
+    ) {
+      throw new Error(
+        "Template email OTP reset password tidak valid"
+      )
     }
-  })
 
-  const mailResult = validateMailResult({
-    result,
-    recipient,
-    mailType: "OTP RESET PASSWORD"
-  })
+    /*
+    |--------------------------------------------------------------------------
+    | GET SENDER
+    |--------------------------------------------------------------------------
+    */
+    const sender =
+      getSender()
 
-  return {
-    success: true,
-    email: recipient,
-    message_id: mailResult.message_id,
-    accepted: mailResult.accepted,
-    rejected: mailResult.rejected,
-    response: mailResult.response
+    /*
+    |--------------------------------------------------------------------------
+    | SEND EMAIL
+    |--------------------------------------------------------------------------
+    */
+    const result =
+      await transporter.sendMail({
+        from: sender,
+
+        to: recipient,
+
+        replyTo:
+          process.env
+            .MAIL_FROM_ADDRESS ||
+          process.env.MAIL_USER,
+
+        subject:
+          template.subject,
+
+        text:
+          template.text ||
+          (
+            `Halo ${name},\n\n` +
+            `Kode OTP reset password SIOPOS Anda adalah:\n\n` +
+            `${otpValue}\n\n` +
+            `Kode berlaku selama 10 menit.\n` +
+            `Jangan berikan kode OTP kepada siapa pun.`
+          ),
+
+        html:
+          template.html
+      })
+
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATE SMTP RESULT
+    |--------------------------------------------------------------------------
+    */
+    const mailResult =
+      validateMailResult({
+        result,
+        recipient,
+        mailType:
+          "OTP RESET PASSWORD"
+      })
+
+    return {
+      success: true,
+
+      email: recipient,
+
+      message_id:
+        mailResult.message_id,
+
+      accepted:
+        mailResult.accepted,
+
+      rejected:
+        mailResult.rejected,
+
+      response:
+        mailResult.response
+    }
+  } catch (error) {
+    /*
+    |--------------------------------------------------------------------------
+    | ERROR LOG
+    |--------------------------------------------------------------------------
+    */
+    console.error("")
+    console.error(
+      "=============================================="
+    )
+
+    console.error(
+      "❌ GAGAL MENGIRIM OTP RESET PASSWORD"
+    )
+
+    console.error(
+      "=============================================="
+    )
+
+    console.error(
+      `Penerima : ${recipient}`
+    )
+
+    console.error(
+      `Error    : ${
+        error.message || error
+      }`
+    )
+
+    if (error.code) {
+      console.error(
+        `Code     : ${error.code}`
+      )
+    }
+
+    if (error.response) {
+      console.error(
+        `Response : ${error.response}`
+      )
+    }
+
+    console.error(
+      "=============================================="
+    )
+    console.error("")
+
+    throw error
   }
 }
 
+/*
+|--------------------------------------------------------------------------
+| EXPORT
+|--------------------------------------------------------------------------
+*/
 module.exports = {
   sendVerificationEmail,
   sendResetPasswordEmail
