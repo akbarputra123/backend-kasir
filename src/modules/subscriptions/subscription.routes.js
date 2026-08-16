@@ -335,7 +335,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *         description: 'Kode invoice (contoh: INV-SIOPOS-20260726-1234)'   // <-- fix: tambahkan tanda kutip
+ *         description: "Kode invoice (contoh: INV-SIOPOS-20260726-1234)"
  *     responses:
  *       200:
  *         description: Data subscription berhasil diambil

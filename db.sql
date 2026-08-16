@@ -38,12 +38,6 @@ CREATE TABLE users (
 );
 
 
-ALTER TABLE auth_tokens
-DROP INDEX unique_auth_token_hash;
-
-ALTER TABLE auth_tokens
-ADD INDEX index_auth_token_hash (token_hash);
-
 CREATE TABLE auth_tokens ( id_token BIGINT AUTO_INCREMENT PRIMARY KEY,
  id_user INT NOT NULL, 
  token_hash VARCHAR(64) NOT NULL,
@@ -325,20 +319,34 @@ CREATE TABLE transactions (
 
     subtotal DECIMAL(15,2) NOT NULL DEFAULT 0,
     diskon DECIMAL(15,2) NOT NULL DEFAULT 0,
+
     pajak DECIMAL(15,2) NOT NULL DEFAULT 0,
+    ppn_persen DECIMAL(5,2) NOT NULL DEFAULT 0,
+
     grand_total DECIMAL(15,2) NOT NULL DEFAULT 0,
 
-    metode_pembayaran ENUM('tunai', 'transfer', 'qris', 'debit', 'ewallet') NOT NULL DEFAULT 'tunai',
+    metode_pembayaran ENUM(
+        'tunai',
+        'transfer',
+        'qris',
+        'debit',
+        'ewallet'
+    ) NOT NULL DEFAULT 'tunai',
 
     jumlah_bayar DECIMAL(15,2) NOT NULL DEFAULT 0,
     kembalian DECIMAL(15,2) NOT NULL DEFAULT 0,
 
-    status_transaksi ENUM('selesai', 'dibatalkan') NOT NULL DEFAULT 'selesai',
+    status_transaksi ENUM(
+        'selesai',
+        'dibatalkan'
+    ) NOT NULL DEFAULT 'selesai',
 
     catatan TEXT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
 
     CONSTRAINT fk_transactions_store
         FOREIGN KEY (id_store)
@@ -352,7 +360,10 @@ CREATE TABLE transactions (
         ON DELETE SET NULL
         ON UPDATE CASCADE,
 
-    UNIQUE KEY unique_kode_transaksi_store (id_store, kode_transaksi)
+    UNIQUE KEY unique_kode_transaksi_store (
+        id_store,
+        kode_transaksi
+    )
 );
 CREATE TABLE transaction_items (
     id_transaction_item INT AUTO_INCREMENT PRIMARY KEY,
@@ -448,6 +459,14 @@ CREATE TABLE subscriptions (
     id_owner INT NOT NULL,
     id_plan INT NOT NULL,
 
+    jenis ENUM(
+        'checkout',
+        'upgrade',
+        'extend'
+    ) NOT NULL DEFAULT 'checkout',
+
+    parent_subscription INT NULL,
+
     jumlah_bulan INT NOT NULL DEFAULT 1,
 
     kode_invoice VARCHAR(100) NOT NULL UNIQUE,
@@ -474,6 +493,7 @@ CREATE TABLE subscriptions (
     catatan TEXT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
 
@@ -487,5 +507,11 @@ CREATE TABLE subscriptions (
         FOREIGN KEY (id_plan)
         REFERENCES subscription_plans(id_plan)
         ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_subscriptions_parent
+        FOREIGN KEY (parent_subscription)
+        REFERENCES subscriptions(id_subscription)
+        ON DELETE SET NULL
         ON UPDATE CASCADE
 );

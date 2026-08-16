@@ -220,7 +220,6 @@ const getAdminDashboard = async (currentUser, query) => {
     sales_chart: normalizeSalesChart(salesChart)
   }
 }
-
 /*
 |--------------------------------------------------------------------------
 | GET CASHIER DASHBOARD
@@ -231,24 +230,61 @@ const getCashierDashboard = async (currentUser, query) => {
     throw new Error("Kasir belum terhubung dengan toko")
   }
 
-  const limitRecentTransactions = safeLimit(query.limit_recent_transactions || 5)
+  // ================================================================
+  // LIMIT
+  // ================================================================
+  const limitTopProducts = safeLimit(
+    query.limit_top_products || 5
+  )
 
+  const limitRecentTransactions = safeLimit(
+    query.limit_recent_transactions || 5
+  )
+
+  // ================================================================
+  // SUMMARY KASIR
+  // ================================================================
   const summary = await dashboardModel.getCashierSummary(
     currentUser.id_store,
     currentUser.id_user
   )
 
-  const recentTransactions = await dashboardModel.getCashierRecentTransactions(
+  // ================================================================
+  // PRODUK TERLARIS TOKO
+  // ================================================================
+  const topProducts = await dashboardModel.getStoreTopProducts(
     currentUser.id_store,
-    currentUser.id_user,
-    limitRecentTransactions
+    limitTopProducts
   )
 
+  // ================================================================
+  // TRANSAKSI TERBARU KASIR
+  // ================================================================
+  const recentTransactions =
+    await dashboardModel.getCashierRecentTransactions(
+      currentUser.id_store,
+      currentUser.id_user,
+      limitRecentTransactions
+    )
+
+  // ================================================================
+  // RESPONSE
+  // ================================================================
   return {
     role: "kasir",
+
     id_store: Number(currentUser.id_store),
+
     summary: normalizeSummary(summary),
-    recent_transactions: normalizeRecentTransactions(recentTransactions)
+
+    top_products: normalizeTopProducts(
+      topProducts
+    ),
+
+    recent_transactions:
+      normalizeRecentTransactions(
+        recentTransactions
+      )
   }
 }
 
