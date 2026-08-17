@@ -1,4 +1,4 @@
-const pool = require("../../config/database")
+const pool = require("../../config/database");
 
 /*
 |--------------------------------------------------------------------------
@@ -6,33 +6,38 @@ const pool = require("../../config/database")
 |--------------------------------------------------------------------------
 */
 const buildDateFilter = (startDate, endDate, alias = "t") => {
-  let condition = ""
-  const values = []
+  let condition = "";
+  const values = [];
 
   if (startDate && endDate) {
-    condition = ` AND DATE(${alias}.created_at) BETWEEN ? AND ? `
-    values.push(startDate, endDate)
+    condition = ` AND DATE(${alias}.created_at) BETWEEN ? AND ? `;
+    values.push(startDate, endDate);
   } else if (startDate) {
-    condition = ` AND DATE(${alias}.created_at) >= ? `
-    values.push(startDate)
+    condition = ` AND DATE(${alias}.created_at) >= ? `;
+    values.push(startDate);
   } else if (endDate) {
-    condition = ` AND DATE(${alias}.created_at) <= ? `
-    values.push(endDate)
+    condition = ` AND DATE(${alias}.created_at) <= ? `;
+    values.push(endDate);
   }
 
-  return {
-    condition,
-    values
-  }
-}
+  return { condition, values };
+};
 
 /*
 |--------------------------------------------------------------------------
-| SUMMARY BY OWNER
+| SUMMARY BY OWNER (dengan filter toko opsional)
 |--------------------------------------------------------------------------
 */
-const getSummaryByOwner = async (id_owner, startDate, endDate) => {
-  const filter = buildDateFilter(startDate, endDate, "t")
+const getSummaryByOwner = async (id_owner, startDate, endDate, id_store = null) => {
+  const filter = buildDateFilter(startDate, endDate, "t");
+  let storeCondition = "";
+  let params = [id_owner];
+
+  if (id_store) {
+    storeCondition = " AND s.id_store = ? ";
+    params.push(id_store);
+  }
+  params.push(...filter.values);
 
   const [rows] = await pool.query(
     `
@@ -48,21 +53,22 @@ const getSummaryByOwner = async (id_owner, startDate, endDate) => {
     JOIN stores s ON t.id_store = s.id_store
     WHERE s.id_owner = ?
       AND t.status_transaksi = 'selesai'
+      ${storeCondition}
       ${filter.condition}
     `,
-    [id_owner, ...filter.values]
-  )
+    params
+  );
 
-  return rows[0]
-}
+  return rows[0];
+};
 
 /*
 |--------------------------------------------------------------------------
-| SUMMARY BY STORE
+| SUMMARY BY STORE (tetap)
 |--------------------------------------------------------------------------
 */
 const getSummaryByStore = async (id_store, startDate, endDate) => {
-  const filter = buildDateFilter(startDate, endDate, "t")
+  const filter = buildDateFilter(startDate, endDate, "t");
 
   const [rows] = await pool.query(
     `
@@ -80,18 +86,26 @@ const getSummaryByStore = async (id_store, startDate, endDate) => {
       ${filter.condition}
     `,
     [id_store, ...filter.values]
-  )
+  );
 
-  return rows[0]
-}
+  return rows[0];
+};
 
 /*
 |--------------------------------------------------------------------------
-| DAILY REPORT BY OWNER
+| DAILY REPORT BY OWNER (dengan filter toko opsional)
 |--------------------------------------------------------------------------
 */
-const getDailyByOwner = async (id_owner, startDate, endDate) => {
-  const filter = buildDateFilter(startDate, endDate, "t")
+const getDailyByOwner = async (id_owner, startDate, endDate, id_store = null) => {
+  const filter = buildDateFilter(startDate, endDate, "t");
+  let storeCondition = "";
+  let params = [id_owner];
+
+  if (id_store) {
+    storeCondition = " AND s.id_store = ? ";
+    params.push(id_store);
+  }
+  params.push(...filter.values);
 
   const [rows] = await pool.query(
     `
@@ -104,23 +118,24 @@ const getDailyByOwner = async (id_owner, startDate, endDate) => {
     JOIN stores s ON t.id_store = s.id_store
     WHERE s.id_owner = ?
       AND t.status_transaksi = 'selesai'
+      ${storeCondition}
       ${filter.condition}
     GROUP BY DATE(t.created_at)
     ORDER BY tanggal DESC
     `,
-    [id_owner, ...filter.values]
-  )
+    params
+  );
 
-  return rows
-}
+  return rows;
+};
 
 /*
 |--------------------------------------------------------------------------
-| DAILY REPORT BY STORE
+| DAILY REPORT BY STORE (tetap)
 |--------------------------------------------------------------------------
 */
 const getDailyByStore = async (id_store, startDate, endDate) => {
-  const filter = buildDateFilter(startDate, endDate, "t")
+  const filter = buildDateFilter(startDate, endDate, "t");
 
   const [rows] = await pool.query(
     `
@@ -137,17 +152,25 @@ const getDailyByStore = async (id_store, startDate, endDate) => {
     ORDER BY tanggal DESC
     `,
     [id_store, ...filter.values]
-  )
+  );
 
-  return rows
-}
+  return rows;
+};
 
 /*
 |--------------------------------------------------------------------------
-| MONTHLY REPORT BY OWNER
+| MONTHLY REPORT BY OWNER (dengan filter toko opsional)
 |--------------------------------------------------------------------------
 */
-const getMonthlyByOwner = async (id_owner, year) => {
+const getMonthlyByOwner = async (id_owner, year, id_store = null) => {
+  let storeCondition = "";
+  let params = [id_owner, year];
+
+  if (id_store) {
+    storeCondition = " AND s.id_store = ? ";
+    params.splice(1, 0, id_store); // sisipkan setelah id_owner, sebelum year
+  }
+
   const [rows] = await pool.query(
     `
     SELECT
@@ -160,18 +183,19 @@ const getMonthlyByOwner = async (id_owner, year) => {
     WHERE s.id_owner = ?
       AND t.status_transaksi = 'selesai'
       AND YEAR(t.created_at) = ?
+      ${storeCondition}
     GROUP BY DATE_FORMAT(t.created_at, '%Y-%m')
     ORDER BY bulan ASC
     `,
-    [id_owner, year]
-  )
+    params
+  );
 
-  return rows
-}
+  return rows;
+};
 
 /*
 |--------------------------------------------------------------------------
-| MONTHLY REPORT BY STORE
+| MONTHLY REPORT BY STORE (tetap)
 |--------------------------------------------------------------------------
 */
 const getMonthlyByStore = async (id_store, year) => {
@@ -190,18 +214,26 @@ const getMonthlyByStore = async (id_store, year) => {
     ORDER BY bulan ASC
     `,
     [id_store, year]
-  )
+  );
 
-  return rows
-}
+  return rows;
+};
 
 /*
 |--------------------------------------------------------------------------
-| TOP PRODUCTS BY OWNER
+| TOP PRODUCTS BY OWNER (dengan filter toko opsional)
 |--------------------------------------------------------------------------
 */
-const getTopProductsByOwner = async (id_owner, startDate, endDate, limit = 10) => {
-  const filter = buildDateFilter(startDate, endDate, "t")
+const getTopProductsByOwner = async (id_owner, startDate, endDate, limit = 10, id_store = null) => {
+  const filter = buildDateFilter(startDate, endDate, "t");
+  let storeCondition = "";
+  let params = [id_owner];
+
+  if (id_store) {
+    storeCondition = " AND s.id_store = ? ";
+    params.push(id_store);
+  }
+  params.push(...filter.values, Number(limit));
 
   const [rows] = await pool.query(
     `
@@ -217,6 +249,7 @@ const getTopProductsByOwner = async (id_owner, startDate, endDate, limit = 10) =
     JOIN stores s ON t.id_store = s.id_store
     WHERE s.id_owner = ?
       AND t.status_transaksi = 'selesai'
+      ${storeCondition}
       ${filter.condition}
     GROUP BY
       ti.id_product,
@@ -226,19 +259,19 @@ const getTopProductsByOwner = async (id_owner, startDate, endDate, limit = 10) =
     ORDER BY total_terjual DESC
     LIMIT ?
     `,
-    [id_owner, ...filter.values, Number(limit)]
-  )
+    params
+  );
 
-  return rows
-}
+  return rows;
+};
 
 /*
 |--------------------------------------------------------------------------
-| TOP PRODUCTS BY STORE
+| TOP PRODUCTS BY STORE (tetap)
 |--------------------------------------------------------------------------
 */
 const getTopProductsByStore = async (id_store, startDate, endDate, limit = 10) => {
-  const filter = buildDateFilter(startDate, endDate, "t")
+  const filter = buildDateFilter(startDate, endDate, "t");
 
   const [rows] = await pool.query(
     `
@@ -261,17 +294,26 @@ const getTopProductsByStore = async (id_store, startDate, endDate, limit = 10) =
     LIMIT ?
     `,
     [id_store, ...filter.values, Number(limit)]
-  )
+  );
 
-  return rows
-}
+  return rows;
+};
 
 /*
 |--------------------------------------------------------------------------
-| RECENT TRANSACTIONS BY OWNER
+| RECENT TRANSACTIONS BY OWNER (dengan filter toko opsional)
 |--------------------------------------------------------------------------
 */
-const getRecentTransactionsByOwner = async (id_owner, limit = 10) => {
+const getRecentTransactionsByOwner = async (id_owner, limit = 10, id_store = null) => {
+  let storeCondition = "";
+  let params = [id_owner];
+
+  if (id_store) {
+    storeCondition = " AND s.id_store = ? ";
+    params.push(id_store);
+  }
+  params.push(Number(limit));
+
   const [rows] = await pool.query(
     `
     SELECT
@@ -293,18 +335,19 @@ const getRecentTransactionsByOwner = async (id_owner, limit = 10) => {
     JOIN stores s ON t.id_store = s.id_store
     LEFT JOIN users u ON t.id_user = u.id_user
     WHERE s.id_owner = ?
+      ${storeCondition}
     ORDER BY t.id_transaction DESC
     LIMIT ?
     `,
-    [id_owner, Number(limit)]
-  )
+    params
+  );
 
-  return rows
-}
+  return rows;
+};
 
 /*
 |--------------------------------------------------------------------------
-| RECENT TRANSACTIONS BY STORE
+| RECENT TRANSACTIONS BY STORE (tetap)
 |--------------------------------------------------------------------------
 */
 const getRecentTransactionsByStore = async (id_store, limit = 10) => {
@@ -333,17 +376,25 @@ const getRecentTransactionsByStore = async (id_store, limit = 10) => {
     LIMIT ?
     `,
     [id_store, Number(limit)]
-  )
+  );
 
-  return rows
-}
+  return rows;
+};
 
 /*
 |--------------------------------------------------------------------------
-| LOW STOCK PRODUCTS BY OWNER
+| LOW STOCK PRODUCTS BY OWNER (dengan filter toko opsional)
 |--------------------------------------------------------------------------
 */
-const getLowStockProductsByOwner = async (id_owner) => {
+const getLowStockProductsByOwner = async (id_owner, id_store = null) => {
+  let storeCondition = "";
+  let params = [id_owner];
+
+  if (id_store) {
+    storeCondition = " AND s.id_store = ? ";
+    params.push(id_store);
+  }
+
   const [rows] = await pool.query(
     `
     SELECT
@@ -361,17 +412,18 @@ const getLowStockProductsByOwner = async (id_owner) => {
     WHERE s.id_owner = ?
       AND p.stok <= p.stok_minimum
       AND p.status_produk = 'aktif'
+      ${storeCondition}
     ORDER BY p.stok ASC
     `,
-    [id_owner]
-  )
+    params
+  );
 
-  return rows
-}
+  return rows;
+};
 
 /*
 |--------------------------------------------------------------------------
-| LOW STOCK PRODUCTS BY STORE
+| LOW STOCK PRODUCTS BY STORE (tetap)
 |--------------------------------------------------------------------------
 */
 const getLowStockProductsByStore = async (id_store) => {
@@ -395,10 +447,10 @@ const getLowStockProductsByStore = async (id_store) => {
     ORDER BY p.stok ASC
     `,
     [id_store]
-  )
+  );
 
-  return rows
-}
+  return rows;
+};
 
 module.exports = {
   getSummaryByOwner,
@@ -412,5 +464,5 @@ module.exports = {
   getRecentTransactionsByOwner,
   getRecentTransactionsByStore,
   getLowStockProductsByOwner,
-  getLowStockProductsByStore
-}
+  getLowStockProductsByStore,
+};
