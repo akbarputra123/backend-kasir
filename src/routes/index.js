@@ -1,4 +1,5 @@
 const express = require("express")
+
 const authRoutes = require("../modules/auth/auth.routes")
 const userRoutes = require("../modules/users/user.routes")
 const storeRoutes = require("../modules/stores/store.routes")
@@ -11,8 +12,11 @@ const dashboardRoutes = require("../modules/dashboard/dashboard.routes")
 const receiptRoutes = require("../modules/receipts/receipt.routes")
 const subscriptionRoutes = require("../modules/subscriptions/subscription.routes")
 const discountRoutes = require("../modules/discounts/discount.routes")
-const variantRoutes = require("../modules/variant/variant.route") // Tambahkan ini
+const variantRoutes = require("../modules/variant/variant.route")
+const notificationRoutes = require("../modules/notifications/notification.routes")
+
 const router = express.Router()
+
 
 /**
  * @swagger
@@ -52,18 +56,41 @@ router.get("/", (req, res) => {
   })
 })
 
+
+/*
+|--------------------------------------------------------------------------
+| API ROUTES
+|--------------------------------------------------------------------------
+*/
+
 router.use("/auth", authRoutes)
+
 router.use("/users", userRoutes)
+
 router.use("/stores", storeRoutes)
+
 router.use("/categories", categoryRoutes)
+
 router.use("/products", productRoutes)
+
 router.use("/stock-logs", stockLogRoutes)
+
 router.use("/transactions", transactionRoutes)
+
 router.use("/reports", reportRoutes)
+
 router.use("/dashboard", dashboardRoutes)
+
 router.use("/receipts", receiptRoutes)
+
 router.use("/subscriptions", subscriptionRoutes)
+
 router.use("/discounts", discountRoutes)
-router.use("/variants", variantRoutes) // Tambahkan ini
+
+router.use("/variants", variantRoutes)
+
+// Notifications
+router.use("/notifications", notificationRoutes)
+
 
 module.exports = router
