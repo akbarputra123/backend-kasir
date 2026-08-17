@@ -5,6 +5,7 @@ const pool = require("../../config/database")
 | HELPER DATE FILTER
 |--------------------------------------------------------------------------
 */
+
 const buildDateFilter = (
   startDate,
   endDate,
@@ -45,40 +46,34 @@ const buildDateFilter = (
 
 /*
 |--------------------------------------------------------------------------
-| CEK OUTLET MILIK OWNER
+| CHECK STORE OWNERSHIP
 |--------------------------------------------------------------------------
 |
-| Digunakan ketika owner memilih outlet tertentu.
+| Memastikan outlet yang dipilih benar-benar milik owner.
 |
-| Contoh:
-|
-| owner = 10
-| outlet = 3
-|
-| Maka hanya boleh jika:
-|
-| stores.id_store = 3
-| AND stores.id_owner = 10
-|
-|--------------------------------------------------------------------------
 */
+
 const isStoreOwnedByOwner = async (
   id_store,
   id_owner
 ) => {
+  if (!id_store || !id_owner) {
+    return false
+  }
+
   const [rows] = await pool.query(
     `
     SELECT
-      id_store
-    FROM stores
-    WHERE id_store = ?
-      AND id_owner = ?
-      AND status_toko = 'aktif'
+      s.id_store
+    FROM stores s
+    WHERE s.id_store = ?
+      AND s.id_owner = ?
+      AND s.status_toko = 'aktif'
     LIMIT 1
     `,
     [
-      id_store,
-      id_owner,
+      Number(id_store),
+      Number(id_owner),
     ]
   )
 
@@ -90,78 +85,77 @@ const isStoreOwnedByOwner = async (
 | SUMMARY BY OWNER
 |--------------------------------------------------------------------------
 |
-| Digunakan jika owner melihat seluruh outlet.
+| Semua outlet milik owner.
 |
-|--------------------------------------------------------------------------
 */
+
 const getSummaryByOwner = async (
   id_owner,
   startDate,
   endDate
 ) => {
-  const filter =
-    buildDateFilter(
-      startDate,
-      endDate,
-      "t"
-    )
+  const filter = buildDateFilter(
+    startDate,
+    endDate,
+    "t"
+  )
 
-  const [rows] =
-    await pool.query(
-      `
-      SELECT
-        COUNT(
-          t.id_transaction
-        ) AS total_transaksi,
+  const [rows] = await pool.query(
+    `
+    SELECT
 
-        COALESCE(
-          SUM(t.total_qty),
-          0
-        ) AS total_produk_terjual,
+      COUNT(
+        t.id_transaction
+      ) AS total_transaksi,
 
-        COALESCE(
-          SUM(t.subtotal),
-          0
-        ) AS total_subtotal,
+      COALESCE(
+        SUM(t.total_qty),
+        0
+      ) AS total_produk_terjual,
 
-        COALESCE(
-          SUM(t.diskon),
-          0
-        ) AS total_diskon,
+      COALESCE(
+        SUM(t.subtotal),
+        0
+      ) AS total_subtotal,
 
-        COALESCE(
-          SUM(t.pajak),
-          0
-        ) AS total_pajak,
+      COALESCE(
+        SUM(t.diskon),
+        0
+      ) AS total_diskon,
 
-        COALESCE(
-          SUM(t.grand_total),
-          0
-        ) AS total_pendapatan,
+      COALESCE(
+        SUM(t.pajak),
+        0
+      ) AS total_pajak,
 
-        COALESCE(
-          AVG(t.grand_total),
-          0
-        ) AS rata_rata_transaksi
+      COALESCE(
+        SUM(t.grand_total),
+        0
+      ) AS total_pendapatan,
 
-      FROM transactions t
+      COALESCE(
+        AVG(t.grand_total),
+        0
+      ) AS rata_rata_transaksi
 
-      INNER JOIN stores s
-        ON t.id_store = s.id_store
+    FROM transactions t
 
-      WHERE s.id_owner = ?
+    INNER JOIN stores s
+      ON t.id_store = s.id_store
 
-        AND s.status_toko = 'aktif'
+    WHERE s.id_owner = ?
 
-        AND t.status_transaksi = 'selesai'
+      AND s.status_toko = 'aktif'
 
-        ${filter.condition}
-      `,
-      [
-        id_owner,
-        ...filter.values,
-      ]
-    )
+      AND t.status_transaksi = 'selesai'
+
+      ${filter.condition}
+    `,
+    [
+      Number(id_owner),
+      ...filter.values,
+    ]
+  )
 
   return rows[0]
 }
@@ -170,347 +164,341 @@ const getSummaryByOwner = async (
 |--------------------------------------------------------------------------
 | SUMMARY BY STORE
 |--------------------------------------------------------------------------
-|
-| Digunakan ketika:
-|
-| owner memilih outlet
-| ATAU
-| admin melihat laporan outletnya.
-|
-|--------------------------------------------------------------------------
 */
+
 const getSummaryByStore = async (
   id_store,
   startDate,
   endDate
 ) => {
-  const filter =
-    buildDateFilter(
-      startDate,
-      endDate,
-      "t"
-    )
+  const filter = buildDateFilter(
+    startDate,
+    endDate,
+    "t"
+  )
 
-  const [rows] =
-    await pool.query(
-      `
-      SELECT
-        COUNT(
-          t.id_transaction
-        ) AS total_transaksi,
+  const [rows] = await pool.query(
+    `
+    SELECT
 
-        COALESCE(
-          SUM(t.total_qty),
-          0
-        ) AS total_produk_terjual,
+      COUNT(
+        t.id_transaction
+      ) AS total_transaksi,
 
-        COALESCE(
-          SUM(t.subtotal),
-          0
-        ) AS total_subtotal,
+      COALESCE(
+        SUM(t.total_qty),
+        0
+      ) AS total_produk_terjual,
 
-        COALESCE(
-          SUM(t.diskon),
-          0
-        ) AS total_diskon,
+      COALESCE(
+        SUM(t.subtotal),
+        0
+      ) AS total_subtotal,
 
-        COALESCE(
-          SUM(t.pajak),
-          0
-        ) AS total_pajak,
+      COALESCE(
+        SUM(t.diskon),
+        0
+      ) AS total_diskon,
 
-        COALESCE(
-          SUM(t.grand_total),
-          0
-        ) AS total_pendapatan,
+      COALESCE(
+        SUM(t.pajak),
+        0
+      ) AS total_pajak,
 
-        COALESCE(
-          AVG(t.grand_total),
-          0
-        ) AS rata_rata_transaksi
+      COALESCE(
+        SUM(t.grand_total),
+        0
+      ) AS total_pendapatan,
 
-      FROM transactions t
+      COALESCE(
+        AVG(t.grand_total),
+        0
+      ) AS rata_rata_transaksi
 
-      INNER JOIN stores s
-        ON t.id_store = s.id_store
+    FROM transactions t
 
-      WHERE t.id_store = ?
+    INNER JOIN stores s
+      ON t.id_store = s.id_store
 
-        AND s.status_toko = 'aktif'
+    WHERE t.id_store = ?
 
-        AND t.status_transaksi = 'selesai'
+      AND s.status_toko = 'aktif'
 
-        ${filter.condition}
-      `,
-      [
-        id_store,
-        ...filter.values,
-      ]
-    )
+      AND t.status_transaksi = 'selesai'
+
+      ${filter.condition}
+    `,
+    [
+      Number(id_store),
+      ...filter.values,
+    ]
+  )
 
   return rows[0]
 }
 
 /*
 |--------------------------------------------------------------------------
-| DAILY REPORT BY OWNER
+| DAILY BY OWNER
 |--------------------------------------------------------------------------
 */
+
 const getDailyByOwner = async (
   id_owner,
   startDate,
   endDate
 ) => {
-  const filter =
-    buildDateFilter(
-      startDate,
-      endDate,
-      "t"
-    )
+  const filter = buildDateFilter(
+    startDate,
+    endDate,
+    "t"
+  )
 
-  const [rows] =
-    await pool.query(
-      `
-      SELECT
-        DATE(
-          t.created_at
-        ) AS tanggal,
+  const [rows] = await pool.query(
+    `
+    SELECT
 
-        COUNT(
-          t.id_transaction
-        ) AS total_transaksi,
+      DATE(
+        t.created_at
+      ) AS tanggal,
 
-        COALESCE(
-          SUM(t.total_qty),
-          0
-        ) AS total_qty,
+      COUNT(
+        t.id_transaction
+      ) AS total_transaksi,
 
-        COALESCE(
-          SUM(t.grand_total),
-          0
-        ) AS total_pendapatan
+      COALESCE(
+        SUM(t.total_qty),
+        0
+      ) AS total_qty,
 
-      FROM transactions t
+      COALESCE(
+        SUM(t.grand_total),
+        0
+      ) AS total_pendapatan
 
-      INNER JOIN stores s
-        ON t.id_store = s.id_store
+    FROM transactions t
 
-      WHERE s.id_owner = ?
+    INNER JOIN stores s
+      ON t.id_store = s.id_store
 
-        AND s.status_toko = 'aktif'
+    WHERE s.id_owner = ?
 
-        AND t.status_transaksi = 'selesai'
+      AND s.status_toko = 'aktif'
 
-        ${filter.condition}
+      AND t.status_transaksi = 'selesai'
 
-      GROUP BY
-        DATE(t.created_at)
+      ${filter.condition}
 
-      ORDER BY
-        tanggal ASC
-      `,
-      [
-        id_owner,
-        ...filter.values,
-      ]
-    )
+    GROUP BY
+      DATE(t.created_at)
+
+    ORDER BY
+      tanggal ASC
+    `,
+    [
+      Number(id_owner),
+      ...filter.values,
+    ]
+  )
 
   return rows
 }
 
 /*
 |--------------------------------------------------------------------------
-| DAILY REPORT BY STORE
+| DAILY BY STORE
 |--------------------------------------------------------------------------
 */
+
 const getDailyByStore = async (
   id_store,
   startDate,
   endDate
 ) => {
-  const filter =
-    buildDateFilter(
-      startDate,
-      endDate,
-      "t"
-    )
+  const filter = buildDateFilter(
+    startDate,
+    endDate,
+    "t"
+  )
 
-  const [rows] =
-    await pool.query(
-      `
-      SELECT
-        DATE(
-          t.created_at
-        ) AS tanggal,
+  const [rows] = await pool.query(
+    `
+    SELECT
 
-        COUNT(
-          t.id_transaction
-        ) AS total_transaksi,
+      DATE(
+        t.created_at
+      ) AS tanggal,
 
-        COALESCE(
-          SUM(t.total_qty),
-          0
-        ) AS total_qty,
+      COUNT(
+        t.id_transaction
+      ) AS total_transaksi,
 
-        COALESCE(
-          SUM(t.grand_total),
-          0
-        ) AS total_pendapatan
+      COALESCE(
+        SUM(t.total_qty),
+        0
+      ) AS total_qty,
 
-      FROM transactions t
+      COALESCE(
+        SUM(t.grand_total),
+        0
+      ) AS total_pendapatan
 
-      INNER JOIN stores s
-        ON t.id_store = s.id_store
+    FROM transactions t
 
-      WHERE t.id_store = ?
+    INNER JOIN stores s
+      ON t.id_store = s.id_store
 
-        AND s.status_toko = 'aktif'
+    WHERE t.id_store = ?
 
-        AND t.status_transaksi = 'selesai'
+      AND s.status_toko = 'aktif'
 
-        ${filter.condition}
+      AND t.status_transaksi = 'selesai'
 
-      GROUP BY
-        DATE(t.created_at)
+      ${filter.condition}
 
-      ORDER BY
-        tanggal ASC
-      `,
-      [
-        id_store,
-        ...filter.values,
-      ]
-    )
+    GROUP BY
+      DATE(t.created_at)
+
+    ORDER BY
+      tanggal ASC
+    `,
+    [
+      Number(id_store),
+      ...filter.values,
+    ]
+  )
 
   return rows
 }
 
 /*
 |--------------------------------------------------------------------------
-| MONTHLY REPORT BY OWNER
+| MONTHLY BY OWNER
 |--------------------------------------------------------------------------
 */
+
 const getMonthlyByOwner = async (
   id_owner,
   year
 ) => {
-  const [rows] =
-    await pool.query(
-      `
-      SELECT
-        DATE_FORMAT(
-          t.created_at,
-          '%Y-%m'
-        ) AS bulan,
+  const [rows] = await pool.query(
+    `
+    SELECT
 
-        COUNT(
-          t.id_transaction
-        ) AS total_transaksi,
+      DATE_FORMAT(
+        t.created_at,
+        '%Y-%m'
+      ) AS bulan,
 
-        COALESCE(
-          SUM(t.total_qty),
-          0
-        ) AS total_qty,
+      COUNT(
+        t.id_transaction
+      ) AS total_transaksi,
 
-        COALESCE(
-          SUM(t.grand_total),
-          0
-        ) AS total_pendapatan
+      COALESCE(
+        SUM(t.total_qty),
+        0
+      ) AS total_qty,
 
-      FROM transactions t
+      COALESCE(
+        SUM(t.grand_total),
+        0
+      ) AS total_pendapatan
 
-      INNER JOIN stores s
-        ON t.id_store = s.id_store
+    FROM transactions t
 
-      WHERE s.id_owner = ?
+    INNER JOIN stores s
+      ON t.id_store = s.id_store
 
-        AND s.status_toko = 'aktif'
+    WHERE s.id_owner = ?
 
-        AND t.status_transaksi = 'selesai'
+      AND s.status_toko = 'aktif'
 
-        AND YEAR(
-          t.created_at
-        ) = ?
+      AND t.status_transaksi = 'selesai'
 
-      GROUP BY
-        DATE_FORMAT(
-          t.created_at,
-          '%Y-%m'
-        )
+      AND YEAR(
+        t.created_at
+      ) = ?
 
-      ORDER BY
-        bulan ASC
-      `,
-      [
-        id_owner,
-        year,
-      ]
-    )
+    GROUP BY
+      DATE_FORMAT(
+        t.created_at,
+        '%Y-%m'
+      )
+
+    ORDER BY
+      bulan ASC
+    `,
+    [
+      Number(id_owner),
+      Number(year),
+    ]
+  )
 
   return rows
 }
 
 /*
 |--------------------------------------------------------------------------
-| MONTHLY REPORT BY STORE
+| MONTHLY BY STORE
 |--------------------------------------------------------------------------
 */
+
 const getMonthlyByStore = async (
   id_store,
   year
 ) => {
-  const [rows] =
-    await pool.query(
-      `
-      SELECT
-        DATE_FORMAT(
-          t.created_at,
-          '%Y-%m'
-        ) AS bulan,
+  const [rows] = await pool.query(
+    `
+    SELECT
 
-        COUNT(
-          t.id_transaction
-        ) AS total_transaksi,
+      DATE_FORMAT(
+        t.created_at,
+        '%Y-%m'
+      ) AS bulan,
 
-        COALESCE(
-          SUM(t.total_qty),
-          0
-        ) AS total_qty,
+      COUNT(
+        t.id_transaction
+      ) AS total_transaksi,
 
-        COALESCE(
-          SUM(t.grand_total),
-          0
-        ) AS total_pendapatan
+      COALESCE(
+        SUM(t.total_qty),
+        0
+      ) AS total_qty,
 
-      FROM transactions t
+      COALESCE(
+        SUM(t.grand_total),
+        0
+      ) AS total_pendapatan
 
-      INNER JOIN stores s
-        ON t.id_store = s.id_store
+    FROM transactions t
 
-      WHERE t.id_store = ?
+    INNER JOIN stores s
+      ON t.id_store = s.id_store
 
-        AND s.status_toko = 'aktif'
+    WHERE t.id_store = ?
 
-        AND t.status_transaksi = 'selesai'
+      AND s.status_toko = 'aktif'
 
-        AND YEAR(
-          t.created_at
-        ) = ?
+      AND t.status_transaksi = 'selesai'
 
-      GROUP BY
-        DATE_FORMAT(
-          t.created_at,
-          '%Y-%m'
-        )
+      AND YEAR(
+        t.created_at
+      ) = ?
 
-      ORDER BY
-        bulan ASC
-      `,
-      [
-        id_store,
-        year,
-      ]
-    )
+    GROUP BY
+      DATE_FORMAT(
+        t.created_at,
+        '%Y-%m'
+      )
+
+    ORDER BY
+      bulan ASC
+    `,
+    [
+      Number(id_store),
+      Number(year),
+    ]
+  )
 
   return rows
 }
@@ -520,74 +508,74 @@ const getMonthlyByStore = async (
 | TOP PRODUCTS BY OWNER
 |--------------------------------------------------------------------------
 */
+
 const getTopProductsByOwner = async (
   id_owner,
   startDate,
   endDate,
   limit = 10
 ) => {
-  const filter =
-    buildDateFilter(
-      startDate,
-      endDate,
-      "t"
-    )
+  const filter = buildDateFilter(
+    startDate,
+    endDate,
+    "t"
+  )
 
-  const [rows] =
-    await pool.query(
-      `
-      SELECT
-        ti.id_product,
-        ti.kode_produk,
-        ti.nama_produk,
+  const [rows] = await pool.query(
+    `
+    SELECT
 
-        s.nama_toko,
+      ti.id_product,
+      ti.kode_produk,
+      ti.nama_produk,
 
-        COALESCE(
-          SUM(ti.qty),
-          0
-        ) AS total_terjual,
+      s.nama_toko,
 
-        COALESCE(
-          SUM(ti.subtotal),
-          0
-        ) AS total_pendapatan
+      COALESCE(
+        SUM(ti.qty),
+        0
+      ) AS total_terjual,
 
-      FROM transaction_items ti
+      COALESCE(
+        SUM(ti.subtotal),
+        0
+      ) AS total_pendapatan
 
-      INNER JOIN transactions t
-        ON ti.id_transaction =
-           t.id_transaction
+    FROM transaction_items ti
 
-      INNER JOIN stores s
-        ON t.id_store =
-           s.id_store
+    INNER JOIN transactions t
+      ON ti.id_transaction =
+         t.id_transaction
 
-      WHERE s.id_owner = ?
+    INNER JOIN stores s
+      ON t.id_store =
+         s.id_store
 
-        AND s.status_toko = 'aktif'
+    WHERE s.id_owner = ?
 
-        AND t.status_transaksi = 'selesai'
+      AND s.status_toko = 'aktif'
 
-        ${filter.condition}
+      AND t.status_transaksi = 'selesai'
 
-      GROUP BY
-        ti.id_product,
-        ti.kode_produk,
-        ti.nama_produk,
-        s.nama_toko
+      ${filter.condition}
 
-      ORDER BY
-        total_terjual DESC
+    GROUP BY
+      ti.id_product,
+      ti.kode_produk,
+      ti.nama_produk,
+      s.nama_toko
 
-      LIMIT ?
-      `,
-      [
-        id_owner,
-        ...filter.values,
-        Number(limit),
-      ]
-    )
+    ORDER BY
+      total_terjual DESC
+
+    LIMIT ?
+    `,
+    [
+      Number(id_owner),
+      ...filter.values,
+      Number(limit),
+    ]
+  )
 
   return rows
 }
@@ -597,71 +585,71 @@ const getTopProductsByOwner = async (
 | TOP PRODUCTS BY STORE
 |--------------------------------------------------------------------------
 */
+
 const getTopProductsByStore = async (
   id_store,
   startDate,
   endDate,
   limit = 10
 ) => {
-  const filter =
-    buildDateFilter(
-      startDate,
-      endDate,
-      "t"
-    )
+  const filter = buildDateFilter(
+    startDate,
+    endDate,
+    "t"
+  )
 
-  const [rows] =
-    await pool.query(
-      `
-      SELECT
-        ti.id_product,
-        ti.kode_produk,
-        ti.nama_produk,
+  const [rows] = await pool.query(
+    `
+    SELECT
 
-        COALESCE(
-          SUM(ti.qty),
-          0
-        ) AS total_terjual,
+      ti.id_product,
+      ti.kode_produk,
+      ti.nama_produk,
 
-        COALESCE(
-          SUM(ti.subtotal),
-          0
-        ) AS total_pendapatan
+      COALESCE(
+        SUM(ti.qty),
+        0
+      ) AS total_terjual,
 
-      FROM transaction_items ti
+      COALESCE(
+        SUM(ti.subtotal),
+        0
+      ) AS total_pendapatan
 
-      INNER JOIN transactions t
-        ON ti.id_transaction =
-           t.id_transaction
+    FROM transaction_items ti
 
-      INNER JOIN stores s
-        ON t.id_store =
-           s.id_store
+    INNER JOIN transactions t
+      ON ti.id_transaction =
+         t.id_transaction
 
-      WHERE t.id_store = ?
+    INNER JOIN stores s
+      ON t.id_store =
+         s.id_store
 
-        AND s.status_toko = 'aktif'
+    WHERE t.id_store = ?
 
-        AND t.status_transaksi = 'selesai'
+      AND s.status_toko = 'aktif'
 
-        ${filter.condition}
+      AND t.status_transaksi = 'selesai'
 
-      GROUP BY
-        ti.id_product,
-        ti.kode_produk,
-        ti.nama_produk
+      ${filter.condition}
 
-      ORDER BY
-        total_terjual DESC
+    GROUP BY
+      ti.id_product,
+      ti.kode_produk,
+      ti.nama_produk
 
-      LIMIT ?
-      `,
-      [
-        id_store,
-        ...filter.values,
-        Number(limit),
-      ]
-    )
+    ORDER BY
+      total_terjual DESC
+
+    LIMIT ?
+    `,
+    [
+      Number(id_store),
+      ...filter.values,
+      Number(limit),
+    ]
+  )
 
   return rows
 }
@@ -671,69 +659,81 @@ const getTopProductsByStore = async (
 | RECENT TRANSACTIONS BY OWNER
 |--------------------------------------------------------------------------
 */
+
 const getRecentTransactionsByOwner = async (
   id_owner,
+  startDate,
+  endDate,
   limit = 10
 ) => {
-  const [rows] =
-    await pool.query(
-      `
-      SELECT
-        t.id_transaction,
-        t.id_store,
+  const filter = buildDateFilter(
+    startDate,
+    endDate,
+    "t"
+  )
 
-        s.nama_toko,
+  const [rows] = await pool.query(
+    `
+    SELECT
 
-        t.id_user,
+      t.id_transaction,
+      t.id_store,
 
-        u.nama_lengkap AS nama_kasir,
+      s.nama_toko,
 
-        t.kode_transaksi,
+      t.id_user,
 
-        t.total_item,
-        t.total_qty,
+      u.nama_lengkap AS nama_kasir,
 
-        t.subtotal,
-        t.diskon,
-        t.pajak,
+      t.kode_transaksi,
 
-        t.grand_total,
+      t.total_item,
+      t.total_qty,
 
-        t.metode_pembayaran,
+      t.subtotal,
+      t.diskon,
+      t.pajak,
 
-        t.jumlah_bayar,
-        t.kembalian,
+      t.grand_total,
 
-        t.status_transaksi,
+      t.metode_pembayaran,
 
-        t.created_at
+      t.jumlah_bayar,
+      t.kembalian,
 
-      FROM transactions t
+      t.status_transaksi,
 
-      INNER JOIN stores s
-        ON t.id_store =
-           s.id_store
+      t.created_at
 
-      LEFT JOIN users u
-        ON t.id_user =
-           u.id_user
+    FROM transactions t
 
-      WHERE s.id_owner = ?
+    INNER JOIN stores s
+      ON t.id_store =
+         s.id_store
 
-        AND s.status_toko = 'aktif'
+    LEFT JOIN users u
+      ON t.id_user =
+         u.id_user
 
-        AND t.status_transaksi = 'selesai'
+    WHERE s.id_owner = ?
 
-      ORDER BY
-        t.id_transaction DESC
+      AND s.status_toko = 'aktif'
 
-      LIMIT ?
-      `,
-      [
-        id_owner,
-        Number(limit),
-      ]
-    )
+      AND t.status_transaksi = 'selesai'
+
+      ${filter.condition}
+
+    ORDER BY
+      t.id_transaction DESC
+
+    LIMIT ?
+    `,
+    [
+      Number(id_owner),
+      ...filter.values,
+      Number(limit),
+    ]
+  )
 
   return rows
 }
@@ -743,177 +743,191 @@ const getRecentTransactionsByOwner = async (
 | RECENT TRANSACTIONS BY STORE
 |--------------------------------------------------------------------------
 */
+
 const getRecentTransactionsByStore = async (
   id_store,
+  startDate,
+  endDate,
   limit = 10
 ) => {
-  const [rows] =
-    await pool.query(
-      `
-      SELECT
-        t.id_transaction,
-        t.id_store,
+  const filter = buildDateFilter(
+    startDate,
+    endDate,
+    "t"
+  )
 
-        s.nama_toko,
+  const [rows] = await pool.query(
+    `
+    SELECT
 
-        t.id_user,
+      t.id_transaction,
+      t.id_store,
 
-        u.nama_lengkap AS nama_kasir,
+      s.nama_toko,
 
-        t.kode_transaksi,
+      t.id_user,
 
-        t.total_item,
-        t.total_qty,
+      u.nama_lengkap AS nama_kasir,
 
-        t.subtotal,
-        t.diskon,
-        t.pajak,
+      t.kode_transaksi,
 
-        t.grand_total,
+      t.total_item,
+      t.total_qty,
 
-        t.metode_pembayaran,
+      t.subtotal,
+      t.diskon,
+      t.pajak,
 
-        t.jumlah_bayar,
-        t.kembalian,
+      t.grand_total,
 
-        t.status_transaksi,
+      t.metode_pembayaran,
 
-        t.created_at
+      t.jumlah_bayar,
+      t.kembalian,
 
-      FROM transactions t
+      t.status_transaksi,
 
-      INNER JOIN stores s
-        ON t.id_store =
-           s.id_store
+      t.created_at
 
-      LEFT JOIN users u
-        ON t.id_user =
-           u.id_user
+    FROM transactions t
 
-      WHERE t.id_store = ?
+    INNER JOIN stores s
+      ON t.id_store =
+         s.id_store
 
-        AND s.status_toko = 'aktif'
+    LEFT JOIN users u
+      ON t.id_user =
+         u.id_user
 
-        AND t.status_transaksi = 'selesai'
+    WHERE t.id_store = ?
 
-      ORDER BY
-        t.id_transaction DESC
+      AND s.status_toko = 'aktif'
 
-      LIMIT ?
-      `,
-      [
-        id_store,
-        Number(limit),
-      ]
-    )
+      AND t.status_transaksi = 'selesai'
+
+      ${filter.condition}
+
+    ORDER BY
+      t.id_transaction DESC
+
+    LIMIT ?
+    `,
+    [
+      Number(id_store),
+      ...filter.values,
+      Number(limit),
+    ]
+  )
 
   return rows
 }
 
 /*
 |--------------------------------------------------------------------------
-| LOW STOCK PRODUCTS BY OWNER
+| LOW STOCK BY OWNER
 |--------------------------------------------------------------------------
 */
+
 const getLowStockProductsByOwner = async (
   id_owner
 ) => {
-  const [rows] =
-    await pool.query(
-      `
-      SELECT
-        p.id_product,
-        p.id_store,
+  const [rows] = await pool.query(
+    `
+    SELECT
 
-        s.nama_toko,
+      p.id_product,
+      p.id_store,
 
-        p.kode_produk,
-        p.nama_produk,
+      s.nama_toko,
 
-        p.stok,
-        p.stok_minimum,
+      p.kode_produk,
+      p.nama_produk,
 
-        p.satuan,
+      p.stok,
+      p.stok_minimum,
 
-        p.status_produk
+      p.satuan,
 
-      FROM products p
+      p.status_produk
 
-      INNER JOIN stores s
-        ON p.id_store =
-           s.id_store
+    FROM products p
 
-      WHERE s.id_owner = ?
+    INNER JOIN stores s
+      ON p.id_store =
+         s.id_store
 
-        AND s.status_toko = 'aktif'
+    WHERE s.id_owner = ?
 
-        AND p.track_stock = 'ya'
+      AND s.status_toko = 'aktif'
 
-        AND p.stok <= p.stok_minimum
+      AND p.track_stock = 'ya'
 
-        AND p.status_produk = 'aktif'
+      AND p.stok <= p.stok_minimum
 
-      ORDER BY
-        p.stok ASC
-      `,
-      [
-        id_owner,
-      ]
-    )
+      AND p.status_produk = 'aktif'
+
+    ORDER BY
+      p.stok ASC
+    `,
+    [
+      Number(id_owner),
+    ]
+  )
 
   return rows
 }
 
 /*
 |--------------------------------------------------------------------------
-| LOW STOCK PRODUCTS BY STORE
+| LOW STOCK BY STORE
 |--------------------------------------------------------------------------
 */
+
 const getLowStockProductsByStore = async (
   id_store
 ) => {
-  const [rows] =
-    await pool.query(
-      `
-      SELECT
-        p.id_product,
-        p.id_store,
+  const [rows] = await pool.query(
+    `
+    SELECT
 
-        s.nama_toko,
+      p.id_product,
+      p.id_store,
 
-        p.kode_produk,
-        p.nama_produk,
+      s.nama_toko,
 
-        p.stok,
-        p.stok_minimum,
+      p.kode_produk,
+      p.nama_produk,
 
-        p.satuan,
+      p.stok,
+      p.stok_minimum,
 
-        p.status_produk
+      p.satuan,
 
-      FROM products p
+      p.status_produk
 
-      INNER JOIN stores s
-        ON p.id_store =
-           s.id_store
+    FROM products p
 
-      WHERE p.id_store = ?
+    INNER JOIN stores s
+      ON p.id_store =
+         s.id_store
 
-        AND s.status_toko = 'aktif'
+    WHERE p.id_store = ?
 
-        AND p.track_stock = 'ya'
+      AND s.status_toko = 'aktif'
 
-        AND p.stok <= p.stok_minimum
+      AND p.track_stock = 'ya'
 
-        AND p.status_produk = 'aktif'
+      AND p.stok <= p.stok_minimum
 
-      ORDER BY
-        p.stok ASC
-      `,
-      [
-        id_store,
-      ]
-    )
+      AND p.status_produk = 'aktif'
+
+    ORDER BY
+      p.stok ASC
+    `,
+    [
+      Number(id_store),
+    ]
+  )
 
   return rows
 }
@@ -923,59 +937,26 @@ const getLowStockProductsByStore = async (
 | EXPORT
 |--------------------------------------------------------------------------
 */
+
 module.exports = {
-  /*
-  |----------------------------------------------------------------------
-  | STORE ACCESS
-  |----------------------------------------------------------------------
-  */
+
   isStoreOwnedByOwner,
 
-  /*
-  |----------------------------------------------------------------------
-  | SUMMARY
-  |----------------------------------------------------------------------
-  */
   getSummaryByOwner,
   getSummaryByStore,
 
-  /*
-  |----------------------------------------------------------------------
-  | DAILY
-  |----------------------------------------------------------------------
-  */
   getDailyByOwner,
   getDailyByStore,
 
-  /*
-  |----------------------------------------------------------------------
-  | MONTHLY
-  |----------------------------------------------------------------------
-  */
   getMonthlyByOwner,
   getMonthlyByStore,
 
-  /*
-  |----------------------------------------------------------------------
-  | TOP PRODUCTS
-  |----------------------------------------------------------------------
-  */
   getTopProductsByOwner,
   getTopProductsByStore,
 
-  /*
-  |----------------------------------------------------------------------
-  | RECENT TRANSACTIONS
-  |----------------------------------------------------------------------
-  */
   getRecentTransactionsByOwner,
   getRecentTransactionsByStore,
 
-  /*
-  |----------------------------------------------------------------------
-  | LOW STOCK
-  |----------------------------------------------------------------------
-  */
   getLowStockProductsByOwner,
   getLowStockProductsByStore,
 }
