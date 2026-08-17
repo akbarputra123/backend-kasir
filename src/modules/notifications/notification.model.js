@@ -1,67 +1,36 @@
 const pool = require("../../config/database");
 
-/**
- * ============================================================
- * NOTIFICATION MODEL
- * ============================================================
- *
- * File:
- * modules/notifications/notification.model.js
- *
- * Tabel:
- * notifications
- *
- * Relasi:
- * - users
- * - stores
- * - subscriptions
- * - subscription_plans
- *
- * Jenis notifikasi:
- *
- * TRANSAKSI
- * - pesanan_baru
- * - pembayaran_berhasil
- * - pesanan_belum_bayar
- * - transaksi_dibatalkan
- *
- * STOCK
- * - stok_menipis
- * - stok_habis
- *
- * SUBSCRIPTION
- * - subscription_hampir_expired
- * - subscription_expired
- *
- * Lainnya:
- * - user_baru
- * - dan notifikasi lainnya
- */
+const parsePositiveInt = (value, fallback, max = null) => {
+    let number = Number.parseInt(value, 10);
 
+    if (!Number.isInteger(number) || number < 0) {
+        number = fallback;
+    }
 
-/**
- * ============================================================
- * GET ALL NOTIFICATIONS
- * ============================================================
- *
- * Notifikasi:
- *
- * 1. Spesifik toko
- *    id_store = toko user
- *
- * 2. Global
- *    id_store IS NULL
- *
- * Notifikasi subscription termasuk global notification,
- * sehingga tetap tampil walaupun owner sedang berada
- * pada toko tertentu.
- */
+    if (max !== null && number > max) {
+        number = max;
+    }
+
+    return number;
+};
+
+const parseLimit = (value, fallback = 20) => {
+    return parsePositiveInt(value, fallback, 100);
+};
+
+const parseOffset = (value, fallback = 0) => {
+    return parsePositiveInt(value, fallback);
+};
+
 const findAllByUser = async ({
     idUser,
     idStore = null,
     limit = 20,
     offset = 0,
 }) => {
+    const safeLimit = parseLimit(limit);
+    const safeOffset = parseOffset(offset);
+
     let query = `
         SELECT
             n.id_notification,
@@ -94,34 +63,24 @@ const findAllByUser = async ({
 
     query += `
         ORDER BY n.created_at DESC
-        LIMIT ? OFFSET ?
+        LIMIT ${safeLimit}
+        OFFSET ${safeOffset}
     `;
 
-    params.push(
-        Number(limit),
-        Number(offset)
-    );
-
-    const [rows] = await pool.execute(
-        query,
-        params
-    );
+    const [rows] = await pool.execute(query, params);
 
     return rows;
 };
 
-
-/**
- * ============================================================
- * GET UNREAD NOTIFICATIONS
- * ============================================================
- */
 const findUnreadByUser = async ({
     idUser,
     idStore = null,
     limit = 20,
     offset = 0,
 }) => {
+    const safeLimit = parseLimit(limit);
+    const safeOffset = parseOffset(offset);
+
     let query = `
         SELECT
             n.id_notification,
@@ -155,28 +114,15 @@ const findUnreadByUser = async ({
 
     query += `
         ORDER BY n.created_at DESC
-        LIMIT ? OFFSET ?
+        LIMIT ${safeLimit}
+        OFFSET ${safeOffset}
     `;
 
-    params.push(
-        Number(limit),
-        Number(offset)
-    );
-
-    const [rows] = await pool.execute(
-        query,
-        params
-    );
+    const [rows] = await pool.execute(query, params);
 
     return rows;
 };
 
-
-/**
- * ============================================================
- * GET UNREAD COUNT
- * ============================================================
- */
 const countUnreadByUser = async ({
     idUser,
     idStore = null,
@@ -202,22 +148,11 @@ const countUnreadByUser = async ({
         params.push(idStore);
     }
 
-    const [rows] = await pool.execute(
-        query,
-        params
-    );
+    const [rows] = await pool.execute(query, params);
 
-    return Number(
-        rows[0]?.total || 0
-    );
+    return Number(rows[0]?.total || 0);
 };
 
-
-/**
- * ============================================================
- * FIND NOTIFICATION BY ID
- * ============================================================
- */
 const findById = async ({
     idNotification,
     idUser,
@@ -250,12 +185,6 @@ const findById = async ({
     return rows[0] || null;
 };
 
-
-/**
- * ============================================================
- * CREATE NOTIFICATION
- * ============================================================
- */
 const create = async ({
     idUser,
     idStore = null,
@@ -303,39 +232,18 @@ const create = async ({
 
     return {
         id_notification: result.insertId,
-
         id_user: idUser,
         id_store: idStore,
-
         tipe,
         judul,
         pesan,
-
         reference_type: referenceType,
         reference_id: referenceId,
-
         is_read: false,
         read_at: null,
     };
 };
 
-
-/**
- * ============================================================
- * CHECK NOTIFICATION BY REFERENCE
- * ============================================================
- *
- * Digunakan untuk mencegah duplicate notification.
- *
- * Contoh:
- *
- * subscription ID 10
- * tipe:
- * subscription_hampir_expired
- *
- * Jika sudah pernah dibuat,
- * jangan buat lagi.
- */
 const findByReference = async ({
     idUser,
     tipe,
@@ -375,14 +283,6 @@ const findByReference = async ({
     return rows[0] || null;
 };
 
-
-/**
- * ============================================================
- * CREATE IF NOT EXISTS
- * ============================================================
- *
- * Mencegah notification yang sama dibuat berkali-kali.
- */
 const createIfNotExists = async ({
     idUser,
     idStore = null,
@@ -424,12 +324,6 @@ const createIfNotExists = async ({
     };
 };
 
-
-/**
- * ============================================================
- * MARK ONE NOTIFICATION AS READ
- * ============================================================
- */
 const markAsRead = async ({
     idNotification,
     idUser,
@@ -453,12 +347,6 @@ const markAsRead = async ({
     return result.affectedRows > 0;
 };
 
-
-/**
- * ============================================================
- * MARK ALL NOTIFICATIONS AS READ
- * ============================================================
- */
 const markAllAsRead = async ({
     idUser,
     idStore = null,
@@ -493,12 +381,6 @@ const markAllAsRead = async ({
     return result.affectedRows;
 };
 
-
-/**
- * ============================================================
- * DELETE NOTIFICATION
- * ============================================================
- */
 const remove = async ({
     idNotification,
     idUser,
@@ -518,12 +400,6 @@ const remove = async ({
     return result.affectedRows > 0;
 };
 
-
-/**
- * ============================================================
- * DELETE ALL READ NOTIFICATIONS
- * ============================================================
- */
 const removeAllRead = async ({
     idUser,
     idStore = null,
@@ -555,12 +431,6 @@ const removeAllRead = async ({
     return result.affectedRows;
 };
 
-
-/**
- * ============================================================
- * CHECK NOTIFICATION EXISTS
- * ============================================================
- */
 const exists = async ({
     idNotification,
     idUser,
@@ -583,17 +453,13 @@ const exists = async ({
     return rows.length > 0;
 };
 
-
-/**
- * ============================================================
- * GET LATEST NOTIFICATIONS
- * ============================================================
- */
 const findLatestByUser = async ({
     idUser,
     idStore = null,
     limit = 5,
 }) => {
+    const safeLimit = parseLimit(limit, 5);
+
     let query = `
         SELECT
             n.id_notification,
@@ -626,34 +492,14 @@ const findLatestByUser = async ({
 
     query += `
         ORDER BY n.created_at DESC
-        LIMIT ?
+        LIMIT ${safeLimit}
     `;
 
-    params.push(
-        Number(limit)
-    );
-
-    const [rows] = await pool.execute(
-        query,
-        params
-    );
+    const [rows] = await pool.execute(query, params);
 
     return rows;
 };
 
-
-/**
- * ============================================================
- * GET ACTIVE SUBSCRIPTION OWNER
- * ============================================================
- *
- * Mengambil subscription aktif milik owner.
- *
- * Digunakan oleh notification service untuk:
- *
- * - hampir expired
- * - expired
- */
 const findActiveSubscriptionByOwner = async ({
     idOwner,
 }) => {
@@ -672,22 +518,16 @@ const findActiveSubscriptionByOwner = async ({
             s.harga,
             s.status_langganan,
             s.metode_pembayaran,
-
             p.nama_paket,
             p.durasi_hari
-
         FROM subscriptions s
-
         INNER JOIN subscription_plans p
             ON p.id_plan = s.id_plan
-
         WHERE s.id_owner = ?
           AND s.status_langganan = 'aktif'
-
         ORDER BY
             s.tanggal_berakhir DESC,
             s.id_subscription DESC
-
         LIMIT 1
         `,
         [
@@ -698,12 +538,6 @@ const findActiveSubscriptionByOwner = async ({
     return rows[0] || null;
 };
 
-
-/**
- * ============================================================
- * GET SUBSCRIPTION BY ID
- * ============================================================
- */
 const findSubscriptionById = async ({
     idSubscription,
     idOwner = null,
@@ -726,25 +560,18 @@ const findSubscriptionById = async ({
             s.catatan,
             s.created_at,
             s.updated_at,
-
             p.nama_paket,
             p.durasi_hari,
             p.deskripsi
-
         FROM subscriptions s
-
         INNER JOIN subscription_plans p
             ON p.id_plan = s.id_plan
-
         WHERE s.id_subscription = ?
     `;
 
     const params = [idSubscription];
 
-    if (
-        idOwner !== null &&
-        idOwner !== undefined
-    ) {
+    if (idOwner !== null && idOwner !== undefined) {
         query += `
             AND s.id_owner = ?
         `;
@@ -764,26 +591,15 @@ const findSubscriptionById = async ({
     return rows[0] || null;
 };
 
-
-/**
- * ============================================================
- * GET SUBSCRIPTIONS NEED EXPIRATION NOTIFICATION
- * ============================================================
- *
- * Mengambil subscription yang:
- *
- * 1. Masih aktif
- * 2. Akan berakhir dalam N hari
- *
- * Default:
- * 7 hari
- */
 const findSubscriptionsExpiring = async ({
     days = 7,
 }) => {
     const safeDays = Math.max(
         1,
-        Number(days) || 7
+        Math.min(
+            Number.parseInt(days, 10) || 7,
+            365
+        )
     );
 
     const [rows] = await pool.execute(
@@ -797,43 +613,26 @@ const findSubscriptionsExpiring = async ({
             s.tanggal_berakhir,
             s.harga,
             s.status_langganan,
-
             p.nama_paket,
             p.durasi_hari
-
         FROM subscriptions s
-
         INNER JOIN subscription_plans p
             ON p.id_plan = s.id_plan
-
         WHERE s.status_langganan = 'aktif'
           AND s.tanggal_berakhir IS NOT NULL
           AND s.tanggal_berakhir > NOW()
           AND s.tanggal_berakhir <= DATE_ADD(
               NOW(),
-              INTERVAL ? DAY
+              INTERVAL ${safeDays} DAY
           )
-
         ORDER BY
             s.tanggal_berakhir ASC
-        `,
-        [
-            safeDays,
-        ]
+        `
     );
 
     return rows;
 };
 
-
-/**
- * ============================================================
- * GET EXPIRED SUBSCRIPTIONS
- * ============================================================
- *
- * Mengambil subscription yang sudah melewati
- * tanggal_berakhir.
- */
 const findExpiredSubscriptions = async () => {
     const [rows] = await pool.execute(
         `
@@ -846,19 +645,14 @@ const findExpiredSubscriptions = async () => {
             s.tanggal_berakhir,
             s.harga,
             s.status_langganan,
-
             p.nama_paket,
             p.durasi_hari
-
         FROM subscriptions s
-
         INNER JOIN subscription_plans p
             ON p.id_plan = s.id_plan
-
         WHERE s.status_langganan = 'aktif'
           AND s.tanggal_berakhir IS NOT NULL
           AND s.tanggal_berakhir <= NOW()
-
         ORDER BY
             s.tanggal_berakhir ASC
         `
@@ -867,19 +661,6 @@ const findExpiredSubscriptions = async () => {
     return rows;
 };
 
-
-/**
- * ============================================================
- * UPDATE SUBSCRIPTION TO EXPIRED
- * ============================================================
- *
- * Mengubah status subscription:
- *
- * aktif → expired
- *
- * Hanya subscription yang memang sudah lewat
- * tanggal_berakhir.
- */
 const markSubscriptionExpired = async ({
     idSubscription,
 }) => {
@@ -902,18 +683,6 @@ const markSubscriptionExpired = async ({
     return result.affectedRows > 0;
 };
 
-
-/**
- * ============================================================
- * GET SUBSCRIPTION STATUS
- * ============================================================
- *
- * Menghasilkan informasi:
- *
- * - aktif
- * - hampir_expired
- * - expired
- */
 const getSubscriptionStatus = async ({
     idOwner,
 }) => {
@@ -927,6 +696,14 @@ const getSubscriptionStatus = async ({
             subscription: null,
             status: "expired",
             days_remaining: 0,
+        };
+    }
+
+    if (!subscription.tanggal_berakhir) {
+        return {
+            subscription,
+            status: "aktif",
+            days_remaining: null,
         };
     }
 
@@ -968,35 +745,20 @@ const getSubscriptionStatus = async ({
     };
 };
 
-
-/**
- * ============================================================
- * EXPORT
- * ============================================================
- */
 module.exports = {
-
-    // Notification
     findAllByUser,
     findUnreadByUser,
     countUnreadByUser,
     findById,
-
     create,
     createIfNotExists,
     findByReference,
-
     markAsRead,
     markAllAsRead,
-
     remove,
     removeAllRead,
-
     exists,
-
     findLatestByUser,
-
-    // Subscription
     findActiveSubscriptionByOwner,
     findSubscriptionById,
     findSubscriptionsExpiring,
