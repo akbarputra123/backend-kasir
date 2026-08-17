@@ -1,5 +1,5 @@
-const reportService = require("./report.service")
-const { successResponse, errorResponse } = require("../../utils/response")
+const reportService = require("./report.service");
+const { successResponse, errorResponse } = require("../../utils/response");
 
 /*
 |--------------------------------------------------------------------------
@@ -8,26 +8,17 @@ const { successResponse, errorResponse } = require("../../utils/response")
 */
 const getSummary = async (req, res) => {
   try {
-    const summary = await reportService.getSummary(
-      req.query,
-      req.user
-    )
-
-    return successResponse(
-      res,
-      "Ringkasan laporan berhasil diambil",
-      summary,
-      200
-    )
+    const summary = await reportService.getSummary(req.query, req.user);
+    return successResponse(res, "Ringkasan laporan berhasil diambil", summary, 200);
   } catch (error) {
     return errorResponse(
       res,
       error.message || "Gagal mengambil ringkasan laporan",
       400,
       error.message
-    )
+    );
   }
-}
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -36,26 +27,17 @@ const getSummary = async (req, res) => {
 */
 const getDailyReport = async (req, res) => {
   try {
-    const report = await reportService.getDailyReport(
-      req.query,
-      req.user
-    )
-
-    return successResponse(
-      res,
-      "Laporan harian berhasil diambil",
-      report,
-      200
-    )
+    const report = await reportService.getDailyReport(req.query, req.user);
+    return successResponse(res, "Laporan harian berhasil diambil", report, 200);
   } catch (error) {
     return errorResponse(
       res,
       error.message || "Gagal mengambil laporan harian",
       400,
       error.message
-    )
+    );
   }
-}
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -64,26 +46,17 @@ const getDailyReport = async (req, res) => {
 */
 const getMonthlyReport = async (req, res) => {
   try {
-    const report = await reportService.getMonthlyReport(
-      req.query,
-      req.user
-    )
-
-    return successResponse(
-      res,
-      "Laporan bulanan berhasil diambil",
-      report,
-      200
-    )
+    const report = await reportService.getMonthlyReport(req.query, req.user);
+    return successResponse(res, "Laporan bulanan berhasil diambil", report, 200);
   } catch (error) {
     return errorResponse(
       res,
       error.message || "Gagal mengambil laporan bulanan",
       400,
       error.message
-    )
+    );
   }
-}
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -92,26 +65,17 @@ const getMonthlyReport = async (req, res) => {
 */
 const getTopProducts = async (req, res) => {
   try {
-    const products = await reportService.getTopProducts(
-      req.query,
-      req.user
-    )
-
-    return successResponse(
-      res,
-      "Produk terlaris berhasil diambil",
-      products,
-      200
-    )
+    const products = await reportService.getTopProducts(req.query, req.user);
+    return successResponse(res, "Produk terlaris berhasil diambil", products, 200);
   } catch (error) {
     return errorResponse(
       res,
       error.message || "Gagal mengambil produk terlaris",
       400,
       error.message
-    )
+    );
   }
-}
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -120,26 +84,17 @@ const getTopProducts = async (req, res) => {
 */
 const getRecentTransactions = async (req, res) => {
   try {
-    const transactions = await reportService.getRecentTransactions(
-      req.query,
-      req.user
-    )
-
-    return successResponse(
-      res,
-      "Transaksi terakhir berhasil diambil",
-      transactions,
-      200
-    )
+    const transactions = await reportService.getRecentTransactions(req.query, req.user);
+    return successResponse(res, "Transaksi terakhir berhasil diambil", transactions, 200);
   } catch (error) {
     return errorResponse(
       res,
       error.message || "Gagal mengambil transaksi terakhir",
       400,
       error.message
-    )
+    );
   }
-}
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -148,23 +103,18 @@ const getRecentTransactions = async (req, res) => {
 */
 const getLowStockProducts = async (req, res) => {
   try {
-    const products = await reportService.getLowStockProducts(req.user)
-
-    return successResponse(
-      res,
-      "Produk stok menipis berhasil diambil",
-      products,
-      200
-    )
+    // Sekarang service menerima query dan user, sehingga bisa filter berdasarkan store_id
+    const products = await reportService.getLowStockProducts(req.query, req.user);
+    return successResponse(res, "Produk stok menipis berhasil diambil", products, 200);
   } catch (error) {
     return errorResponse(
       res,
       error.message || "Gagal mengambil produk stok menipis",
       400,
       error.message
-    )
+    );
   }
-}
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -173,26 +123,17 @@ const getLowStockProducts = async (req, res) => {
 */
 const getDashboardReport = async (req, res) => {
   try {
-    const dashboard = await reportService.getDashboardReport(
-      req.query,
-      req.user
-    )
-
-    return successResponse(
-      res,
-      "Data dashboard laporan berhasil diambil",
-      dashboard,
-      200
-    )
+    const dashboard = await reportService.getDashboardReport(req.query, req.user);
+    return successResponse(res, "Data dashboard laporan berhasil diambil", dashboard, 200);
   } catch (error) {
     return errorResponse(
       res,
       error.message || "Gagal mengambil data dashboard laporan",
       400,
       error.message
-    )
+    );
   }
-}
+};
 
 module.exports = {
   getSummary,
@@ -201,5 +142,5 @@ module.exports = {
   getTopProducts,
   getRecentTransactions,
   getLowStockProducts,
-  getDashboardReport
-}
+  getDashboardReport,
+};
