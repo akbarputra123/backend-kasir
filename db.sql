@@ -517,7 +517,7 @@ CREATE TABLE subscriptions (
 );
 
 CREATE TABLE notifications (
-    id_notification BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id_notification BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 
     id_user INT NOT NULL,
     id_store INT NULL,
@@ -528,12 +528,12 @@ CREATE TABLE notifications (
     pesan TEXT NOT NULL,
 
     reference_type VARCHAR(50) NULL,
-    reference_id BIGINT NULL,
+    reference_id BIGINT UNSIGNED NULL,
 
     is_read BOOLEAN NOT NULL DEFAULT FALSE,
     read_at DATETIME NULL,
 
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT fk_notifications_user
         FOREIGN KEY (id_user)
@@ -556,6 +556,11 @@ CREATE TABLE notifications (
         is_read
     ),
 
+    INDEX idx_notifications_user_created (
+        id_user,
+        created_at
+    ),
+
     INDEX idx_notifications_store (
         id_store
     ),
@@ -569,6 +574,13 @@ CREATE TABLE notifications (
     ),
 
     INDEX idx_notifications_reference (
+        reference_type,
+        reference_id
+    ),
+
+    INDEX idx_notifications_user_type_reference (
+        id_user,
+        tipe,
         reference_type,
         reference_id
     )
