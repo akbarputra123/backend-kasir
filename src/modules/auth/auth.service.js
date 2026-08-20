@@ -92,16 +92,38 @@ const hashToken = (value) => {
 |--------------------------------------------------------------------------
 | CREATE EXPIRED DATE
 |--------------------------------------------------------------------------
+| Membuat tanggal berdasarkan jumlah menit dari waktu sekarang.
+|--------------------------------------------------------------------------
 */
 const addMinutes = (minutes) => {
-  return new Date(Date.now() + Number(minutes) * 60 * 1000)
+  return new Date(
+    Date.now() + Number(minutes) * 60 * 1000
+  )
+}
+
+/*
+|--------------------------------------------------------------------------
+| ADD DAYS
+|--------------------------------------------------------------------------
+| Menambahkan sejumlah hari ke tanggal tertentu.
+|--------------------------------------------------------------------------
+*/
+const addDays = (date, days) => {
+  const result = new Date(date)
+
+  result.setDate(
+    result.getDate() + Number(days)
+  )
+
+  return result
 }
 
 /*
 |--------------------------------------------------------------------------
 | REGISTER OWNER
 |--------------------------------------------------------------------------
-| Hanya untuk role owner. Super_admin tidak didaftarkan melalui endpoint ini.
+| Hanya untuk role owner.
+| Super_admin tidak didaftarkan melalui endpoint ini.
 |--------------------------------------------------------------------------
 */
 const registerOwner = async (data = {}) => {
@@ -113,23 +135,52 @@ const registerOwner = async (data = {}) => {
   const idBusinessCategory = Number(data.id_business_category)
   const logo = data.logo || null
   const password = String(data.password || "")
-  const konfirmasiPassword = String(data.konfirmasi_password || "")
+  const konfirmasiPassword = String(
+    data.konfirmasi_password || ""
+  )
 
-  // Validasi wajib
-  if (!namaLengkap || !username || !email || !namaToko || !idBusinessCategory || !password || !konfirmasiPassword) {
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDASI WAJIB
+  |--------------------------------------------------------------------------
+  */
+  if (
+    !namaLengkap ||
+    !username ||
+    !email ||
+    !namaToko ||
+    !idBusinessCategory ||
+    !password ||
+    !konfirmasiPassword
+  ) {
     throw new Error(
       "Nama lengkap, username, email, nama toko, kategori usaha, password, dan konfirmasi password wajib diisi."
     )
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDASI EMAIL
+  |--------------------------------------------------------------------------
+  */
   if (!validateEmail(email)) {
     throw new Error("Format email tidak valid")
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDASI USERNAME
+  |--------------------------------------------------------------------------
+  */
   if (username.length < 3) {
     throw new Error("Username minimal 3 karakter")
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDASI PASSWORD
+  |--------------------------------------------------------------------------
+  */
   if (password.length < 6) {
     throw new Error("Password minimal 6 karakter")
   }
@@ -138,53 +189,100 @@ const registerOwner = async (data = {}) => {
     throw new Error("Konfirmasi password tidak sama")
   }
 
-  // Cek username
-  const usernameExists = await authModel.findUserByUsername(username)
+  /*
+  |--------------------------------------------------------------------------
+  | CEK USERNAME
+  |--------------------------------------------------------------------------
+  */
+  const usernameExists =
+    await authModel.findUserByUsername(username)
+
   if (usernameExists) {
     throw new Error("Username sudah digunakan")
   }
 
-  // Cek email
-  const emailExists = await authModel.findUserByEmail(email)
+  /*
+  |--------------------------------------------------------------------------
+  | CEK EMAIL
+  |--------------------------------------------------------------------------
+  */
+  const emailExists =
+    await authModel.findUserByEmail(email)
+
   if (emailExists) {
     if (!emailExists.email_verified_at) {
       throw new Error(
         "Email sudah terdaftar tetapi belum diverifikasi. Silakan kirim ulang email aktivasi."
       )
     }
+
     throw new Error("Email sudah digunakan.")
   }
 
-  // Validasi kategori usaha
-  const category = await authModel.findBusinessCategoryById(idBusinessCategory)
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDASI KATEGORI USAHA
+  |--------------------------------------------------------------------------
+  */
+  const category =
+    await authModel.findBusinessCategoryById(
+      idBusinessCategory
+    )
+
   if (!category) {
     throw new Error("Kategori usaha tidak ditemukan.")
   }
 
-  // Hash password
-  const hashedPassword = await bcrypt.hash(password, 10)
+  /*
+  |--------------------------------------------------------------------------
+  | HASH PASSWORD
+  |--------------------------------------------------------------------------
+  */
+  const hashedPassword =
+    await bcrypt.hash(password, 10)
 
-  // Register owner + store
-  const owner = await authModel.registerOwner({
-    nama_lengkap: namaLengkap,
-    username,
-    email,
-    no_hp: noHp || null,
-    password: hashedPassword,
-    nama_toko: namaToko,
-    id_business_category: idBusinessCategory,
-    logo
-  })
+  /*
+  |--------------------------------------------------------------------------
+  | REGISTER OWNER + STORE
+  |--------------------------------------------------------------------------
+  */
+  const owner =
+    await authModel.registerOwner({
+      nama_lengkap: namaLengkap,
+      username,
+      email,
+      no_hp: noHp || null,
+      password: hashedPassword,
+      nama_toko: namaToko,
+      id_business_category: idBusinessCategory,
+      logo
+    })
 
-  // Generate verification token
-  const verificationToken = generateVerificationToken()
+  /*
+  |--------------------------------------------------------------------------
+  | GENERATE VERIFICATION TOKEN
+  |--------------------------------------------------------------------------
+  */
+  const verificationToken =
+    generateVerificationToken()
 
   console.log("")
   console.log("========== REGISTER TOKEN ==========")
-  console.log("RAW TOKEN       :", verificationToken)
-  console.log("HASH TOKEN      :", hashToken(verificationToken))
+  console.log(
+    "RAW TOKEN       :",
+    verificationToken
+  )
+  console.log(
+    "HASH TOKEN      :",
+    hashToken(verificationToken)
+  )
   console.log("====================================")
 
+  /*
+  |--------------------------------------------------------------------------
+  | SIMPAN VERIFICATION TOKEN
+  |--------------------------------------------------------------------------
+  */
   await authModel.createAuthToken({
     id_user: owner.id_user,
     token_hash: hashToken(verificationToken),
@@ -192,9 +290,16 @@ const registerOwner = async (data = {}) => {
     expires_at: addMinutes(24 * 60)
   })
 
-  console.log("TOKEN DIKIRIM KE EMAIL :", verificationToken)
+  console.log(
+    "TOKEN DIKIRIM KE EMAIL :",
+    verificationToken
+  )
 
-  // Kirim email aktivasi
+  /*
+  |--------------------------------------------------------------------------
+  | KIRIM EMAIL AKTIVASI
+  |--------------------------------------------------------------------------
+  */
   try {
     await mailService.sendVerificationEmail({
       email: owner.email,
@@ -202,23 +307,30 @@ const registerOwner = async (data = {}) => {
       token: verificationToken
     })
 
-    await authModel.updateVerificationEmailSentAt(owner.id_user)
+    await authModel.updateVerificationEmailSentAt(
+      owner.id_user
+    )
 
     return {
       ...owner,
       kategori_usaha: category.nama_kategori,
       verification_email_sent_at: new Date(),
       email_sent: true,
-      pesan: "Registrasi berhasil. Silakan periksa email untuk mengaktifkan akun."
+      pesan:
+        "Registrasi berhasil. Silakan periksa email untuk mengaktifkan akun."
     }
   } catch (error) {
-    console.error("Gagal mengirim email aktivasi:", error.message)
+    console.error(
+      "Gagal mengirim email aktivasi:",
+      error.message
+    )
 
     return {
       ...owner,
       kategori_usaha: category.nama_kategori,
       email_sent: false,
-      pesan: "Registrasi berhasil, tetapi email aktivasi gagal dikirim. Silakan kirim ulang email aktivasi."
+      pesan:
+        "Registrasi berhasil, tetapi email aktivasi gagal dikirim. Silakan kirim ulang email aktivasi."
     }
   }
 }
@@ -240,17 +352,40 @@ const resendVerificationEmail = async (data = {}) => {
   }
 
   const response = {
-    message: "Jika email terdaftar dan belum aktif, tautan aktivasi akan dikirim."
+    message:
+      "Jika email terdaftar dan belum aktif, tautan aktivasi akan dikirim."
   }
 
-  const user = await authModel.findUserByEmail(email)
+  /*
+  |--------------------------------------------------------------------------
+  | CARI USER
+  |--------------------------------------------------------------------------
+  */
+  const user =
+    await authModel.findUserByEmail(email)
 
+  /*
+  |--------------------------------------------------------------------------
+  | USER TIDAK ADA / SUDAH AKTIF
+  |--------------------------------------------------------------------------
+  */
   if (!user || user.email_verified_at) {
     return response
   }
 
-  const verificationToken = generateVerificationToken()
+  /*
+  |--------------------------------------------------------------------------
+  | GENERATE TOKEN BARU
+  |--------------------------------------------------------------------------
+  */
+  const verificationToken =
+    generateVerificationToken()
 
+  /*
+  |--------------------------------------------------------------------------
+  | SIMPAN TOKEN
+  |--------------------------------------------------------------------------
+  */
   await authModel.createAuthToken({
     id_user: user.id_user,
     token_hash: hashToken(verificationToken),
@@ -258,13 +393,25 @@ const resendVerificationEmail = async (data = {}) => {
     expires_at: addMinutes(24 * 60)
   })
 
+  /*
+  |--------------------------------------------------------------------------
+  | KIRIM EMAIL
+  |--------------------------------------------------------------------------
+  */
   await mailService.sendVerificationEmail({
     email: user.email,
     nama_lengkap: user.nama_lengkap,
     token: verificationToken
   })
 
-  await authModel.updateVerificationEmailSentAt(user.id_user)
+  /*
+  |--------------------------------------------------------------------------
+  | UPDATE WAKTU PENGIRIMAN
+  |--------------------------------------------------------------------------
+  */
+  await authModel.updateVerificationEmailSentAt(
+    user.id_user
+  )
 
   return response
 }
@@ -273,80 +420,277 @@ const resendVerificationEmail = async (data = {}) => {
 |--------------------------------------------------------------------------
 | VERIFY EMAIL
 |--------------------------------------------------------------------------
-| Setelah verifikasi berhasil, jika user adalah owner maka otomatis dibuatkan
-| subscription dengan paket Free (dengan tanggal_berakhir diisi 10000 hari ke depan).
+| Setelah email berhasil diverifikasi:
+|
+| 1. User menjadi aktif.
+| 2. Jika user adalah owner:
+|    - Cari paket Free.
+|    - Pastikan owner belum memiliki subscription aktif.
+|    - Buat subscription Free.
+|    - Durasi subscription mengikuti durasi paket di database.
+|
+| Contoh:
+| durasi_hari = 14
+| maka subscription berlaku 14 hari.
 |--------------------------------------------------------------------------
 */
 const verifyEmail = async (token) => {
   const rawToken = String(token || "").trim()
 
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDASI TOKEN
+  |--------------------------------------------------------------------------
+  */
   if (!rawToken) {
     throw new Error("Token aktivasi wajib diisi")
   }
 
-  const hashedToken = hashToken(rawToken)
+  /*
+  |--------------------------------------------------------------------------
+  | HASH TOKEN
+  |--------------------------------------------------------------------------
+  */
+  const hashedToken =
+    hashToken(rawToken)
 
   console.log("")
   console.log("========== VERIFY EMAIL ==========")
-  console.log("RAW TOKEN    :", rawToken)
-  console.log("HASH TOKEN   :", hashedToken)
+  console.log(
+    "RAW TOKEN    :",
+    rawToken
+  )
+  console.log(
+    "HASH TOKEN   :",
+    hashedToken
+  )
   console.log("==================================")
 
-  const tokenData = await authModel.findValidAuthToken(hashedToken, "verifikasi_email")
+  /*
+  |--------------------------------------------------------------------------
+  | CARI TOKEN VALID
+  |--------------------------------------------------------------------------
+  */
+  const tokenData =
+    await authModel.findValidAuthToken(
+      hashedToken,
+      "verifikasi_email"
+    )
 
-  console.log("TOKEN DATA :", tokenData)
+  console.log(
+    "TOKEN DATA :",
+    tokenData
+  )
 
+  /*
+  |--------------------------------------------------------------------------
+  | TOKEN TIDAK VALID
+  |--------------------------------------------------------------------------
+  */
   if (!tokenData) {
-    throw new Error("Tautan aktivasi tidak valid, sudah digunakan, atau sudah kedaluwarsa")
+    throw new Error(
+      "Tautan aktivasi tidak valid, sudah digunakan, atau sudah kedaluwarsa"
+    )
   }
 
-  // 1. Verifikasi email
+  /*
+  |--------------------------------------------------------------------------
+  | 1. VERIFIKASI EMAIL
+  |--------------------------------------------------------------------------
+  */
   await authModel.verifyEmailWithToken({
     id_user: tokenData.id_user,
     id_token: tokenData.id_token
   })
 
-  // 2. Cek apakah user adalah owner
-  const user = await authModel.findUserById(tokenData.id_user)
+  /*
+  |--------------------------------------------------------------------------
+  | 2. AMBIL DATA USER
+  |--------------------------------------------------------------------------
+  */
+  const user =
+    await authModel.findUserById(
+      tokenData.id_user
+    )
 
-  if (user && user.role === 'owner') {
-    // 3. Pastikan paket Free tersedia (buat jika belum ada)
-    const freePlan = await authModel.ensureFreePlan()
+  /*
+  |--------------------------------------------------------------------------
+  | 3. CEK OWNER
+  |--------------------------------------------------------------------------
+  */
+  if (user && user.role === "owner") {
 
-    // 4. Cek apakah owner sudah memiliki subscription aktif
-    const existingSub = await authModel.findActiveSubscriptionByOwner(user.id_user)
+    /*
+    |--------------------------------------------------------------------------
+    | 4. PASTIKAN PAKET FREE TERSEDIA
+    |--------------------------------------------------------------------------
+    */
+    const freePlan =
+      await authModel.ensureFreePlan()
 
-    // 5. Jika belum punya subscription dan paket Free ada, buat subscription Free
+    /*
+    |--------------------------------------------------------------------------
+    | 5. CEK SUBSCRIPTION AKTIF
+    |--------------------------------------------------------------------------
+    */
+    const existingSub =
+      await authModel.findActiveSubscriptionByOwner(
+        user.id_user
+      )
+
+    /*
+    |--------------------------------------------------------------------------
+    | 6. BUAT SUBSCRIPTION FREE
+    |--------------------------------------------------------------------------
+    */
     if (!existingSub && freePlan) {
-      // Tanggal mulai = sekarang
-      const tanggalMulai = new Date()
-      // Tanggal berakhir = 10000 hari ke depan (agar tidak null)
-      const tanggalBerakhir = new Date(tanggalMulai)
-      tanggalBerakhir.setDate(tanggalBerakhir.getDate() + 30)// +10000 hari
 
-      await authModel.createSubscription({
-        id_owner: user.id_user,
-        id_plan: freePlan.id_plan,
-        jumlah_bulan: 0, // 0 artinya tidak terbatas
-        tanggal_mulai: tanggalMulai,
-        tanggal_berakhir: tanggalBerakhir, // SEKARANG TIDAK NULL
-        harga: 0,
-        status_langganan: 'aktif',
-        metode_pembayaran: 'manual_transfer',
-        kode_invoice: authModel.generateInvoiceCode('INV-FREE'),
-        catatan: 'Subscription otomatis dari verifikasi email (Free, berakhir 10000 hari)'
-      })
+      /*
+      |--------------------------------------------------------------------------
+      | AMBIL DURASI DARI DATABASE
+      |--------------------------------------------------------------------------
+      |
+      | Contoh database:
+      |
+      | nama_paket  = Free
+      | durasi_hari = 14
+      |
+      | Maka otomatis subscription = 14 hari.
+      |--------------------------------------------------------------------------
+      */
+      const durasiHari =
+        Number(freePlan.durasi_hari)
 
-      console.log(`[INFO] Subscription Free berhasil dibuat untuk owner ID: ${user.id_user} dengan tanggal_berakhir = ${tanggalBerakhir}`)
+      /*
+      |--------------------------------------------------------------------------
+      | VALIDASI DURASI PAKET
+      |--------------------------------------------------------------------------
+      */
+      if (
+        !Number.isFinite(durasiHari) ||
+        durasiHari <= 0
+      ) {
+        throw new Error(
+          "Durasi paket Free tidak valid. Pastikan kolom durasi_hari pada subscription_plans sudah benar."
+        )
+      }
+
+      /*
+      |--------------------------------------------------------------------------
+      | TANGGAL MULAI
+      |--------------------------------------------------------------------------
+      */
+      const tanggalMulai =
+        new Date()
+
+      /*
+      |--------------------------------------------------------------------------
+      | TANGGAL BERAKHIR
+      |--------------------------------------------------------------------------
+      | Mengikuti durasi paket Free dari database.
+      |--------------------------------------------------------------------------
+      */
+      const tanggalBerakhir =
+        addDays(
+          tanggalMulai,
+          durasiHari
+        )
+
+      /*
+      |--------------------------------------------------------------------------
+      | BUAT SUBSCRIPTION
+      |--------------------------------------------------------------------------
+      */
+      const subscription =
+        await authModel.createSubscription({
+          id_owner: user.id_user,
+          id_plan: freePlan.id_plan,
+
+          /*
+          | jumlah_bulan = 0
+          | Karena subscription Free menggunakan durasi_hari.
+          */
+          jumlah_bulan: 0,
+
+          tanggal_mulai:
+            tanggalMulai,
+
+          tanggal_berakhir:
+            tanggalBerakhir,
+
+          harga: 0,
+
+          status_langganan:
+            "aktif",
+
+          metode_pembayaran:
+            "manual_transfer",
+
+          kode_invoice:
+            authModel.generateInvoiceCode(
+              "INV-FREE"
+            ),
+
+          catatan:
+            `Subscription otomatis dari verifikasi email (Free ${durasiHari} hari)`
+        })
+
+      /*
+      |--------------------------------------------------------------------------
+      | LOG
+      |--------------------------------------------------------------------------
+      */
+      console.log("")
+      console.log(
+        "========== FREE SUBSCRIPTION =========="
+      )
+      console.log(
+        "OWNER ID        :",
+        user.id_user
+      )
+      console.log(
+        "PLAN ID         :",
+        freePlan.id_plan
+      )
+      console.log(
+        "NAMA PAKET      :",
+        freePlan.nama_paket
+      )
+      console.log(
+        "DURASI          :",
+        durasiHari,
+        "hari"
+      )
+      console.log(
+        "TANGGAL MULAI   :",
+        tanggalMulai
+      )
+      console.log(
+        "TANGGAL BERAKHIR:",
+        tanggalBerakhir
+      )
+      console.log(
+        "ID SUBSCRIPTION :",
+        subscription?.id_subscription
+      )
+      console.log(
+        "========================================"
+      )
     }
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | RESPONSE
+  |--------------------------------------------------------------------------
+  */
   return {
     id_user: tokenData.id_user,
     email: tokenData.email,
     email_verified: true,
     status_akun: "aktif",
-    message: "Aktivasi akun berhasil. Akun Anda sudah aktif dan dapat digunakan untuk login."
+    message:
+      "Aktivasi akun berhasil. Akun Anda sudah aktif dan dapat digunakan untuk login."
   }
 }
 
@@ -362,33 +706,71 @@ const verifyEmail = async (token) => {
 */
 const login = async (data = {}) => {
   const loginValue = String(
-    data.usernameOrEmail || data.username || data.email || ""
+    data.usernameOrEmail ||
+    data.username ||
+    data.email ||
+    ""
   ).trim()
 
-  const password = String(data.password || "")
+  const password =
+    String(data.password || "")
 
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDASI LOGIN
+  |--------------------------------------------------------------------------
+  */
   if (!loginValue || !password) {
-    throw new Error("Username/email dan password wajib diisi")
+    throw new Error(
+      "Username/email dan password wajib diisi"
+    )
   }
 
-  const user = await authModel.findUserByUsernameOrEmail(loginValue)
+  /*
+  |--------------------------------------------------------------------------
+  | CARI USER
+  |--------------------------------------------------------------------------
+  */
+  const user =
+    await authModel.findUserByUsernameOrEmail(
+      loginValue
+    )
 
   if (!user) {
-    throw new Error("Username/email atau password salah")
+    throw new Error(
+      "Username/email atau password salah"
+    )
   }
 
-  // Validasi password
-  const isPasswordValid = await bcrypt.compare(password, user.password)
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDASI PASSWORD
+  |--------------------------------------------------------------------------
+  */
+  const isPasswordValid =
+    await bcrypt.compare(
+      password,
+      user.password
+    )
 
   if (!isPasswordValid) {
-    throw new Error("Username/email atau password salah")
+    throw new Error(
+      "Username/email atau password salah"
+    )
   }
 
-  // Normalisasi role
-  const role = normalizeRole(user.role)
+  /*
+  |--------------------------------------------------------------------------
+  | NORMALISASI ROLE
+  |--------------------------------------------------------------------------
+  */
+  const role =
+    normalizeRole(user.role)
 
   if (!role) {
-    throw new Error("Role user tidak valid.")
+    throw new Error(
+      "Role user tidak valid."
+    )
   }
 
   /*
@@ -396,8 +778,10 @@ const login = async (data = {}) => {
   | VALIDASI EMAIL
   |--------------------------------------------------------------------------
   */
-
-  if (role === "owner" && !user.email_verified_at) {
+  if (
+    role === "owner" &&
+    !user.email_verified_at
+  ) {
     throw new Error(
       "Email belum diverifikasi. Silakan periksa email atau kirim ulang email aktivasi."
     )
@@ -408,9 +792,10 @@ const login = async (data = {}) => {
   | VALIDASI STATUS AKUN
   |--------------------------------------------------------------------------
   */
-
   if (user.status_akun !== "aktif") {
-    throw new Error("Akun Anda sedang nonaktif.")
+    throw new Error(
+      "Akun Anda sedang nonaktif."
+    )
   }
 
   /*
@@ -418,35 +803,64 @@ const login = async (data = {}) => {
   | VALIDASI TOKO
   |--------------------------------------------------------------------------
   */
-
   if (role !== "super_admin") {
-    // Admin & kasir wajib memiliki toko
-    if (!user.id_store && (role === "admin" || role === "kasir")) {
-      throw new Error("Akun belum terhubung dengan toko.")
+
+    /*
+    |--------------------------------------------------------------------------
+    | ADMIN & KASIR WAJIB MEMILIKI TOKO
+    |--------------------------------------------------------------------------
+    */
+    if (
+      !user.id_store &&
+      (
+        role === "admin" ||
+        role === "kasir"
+      )
+    ) {
+      throw new Error(
+        "Akun belum terhubung dengan toko."
+      )
     }
 
-    // Admin & kasir tidak boleh login jika toko nonaktif
+    /*
+    |--------------------------------------------------------------------------
+    | ADMIN & KASIR TIDAK BOLEH LOGIN
+    | JIKA TOKO NONAKTIF
+    |--------------------------------------------------------------------------
+    */
     if (
       user.id_store &&
       user.status_toko !== "aktif" &&
-      (role === "admin" || role === "kasir")
+      (
+        role === "admin" ||
+        role === "kasir"
+      )
     ) {
-      throw new Error("Toko sedang nonaktif.")
+      throw new Error(
+        "Toko sedang nonaktif."
+      )
     }
 
     /*
     |--------------------------------------------------------------------------
     | VALIDASI LANGGANAN OWNER
     |--------------------------------------------------------------------------
-    | Owner tetap boleh login walaupun langganan habis.
-    | Admin & Kasir tidak boleh login jika owner tidak memiliki
-    | langganan aktif atau sudah expired.
+    |
+    | Owner tetap boleh login walaupun subscription habis.
+    |
+    | Admin & kasir tidak boleh login jika:
+    | - Owner tidak memiliki subscription aktif.
+    | - Subscription owner sudah expired.
     |--------------------------------------------------------------------------
     */
-
-    if (role === "admin" || role === "kasir") {
+    if (
+      role === "admin" ||
+      role === "kasir"
+    ) {
       const subscription =
-        await authModel.findActiveSubscriptionByStore(user.id_store)
+        await authModel.findActiveSubscriptionByStore(
+          user.id_store
+        )
 
       if (!subscription) {
         throw new Error(
@@ -461,48 +875,61 @@ const login = async (data = {}) => {
   | UPDATE LAST LOGIN
   |--------------------------------------------------------------------------
   */
-
-  await authModel.updateLastLogin(user.id_user)
+  await authModel.updateLastLogin(
+    user.id_user
+  )
 
   /*
   |--------------------------------------------------------------------------
-  | GENERATE TOKEN
+  | GENERATE JWT TOKEN
   |--------------------------------------------------------------------------
   */
-
-  const token = generateToken({
-    id_user: user.id_user,
-    id_store: user.id_store,
-    nama_lengkap: user.nama_lengkap,
-    username: user.username,
-    email: user.email,
-    role
-  })
+  const token =
+    generateToken({
+      id_user: user.id_user,
+      id_store: user.id_store,
+      nama_lengkap: user.nama_lengkap,
+      username: user.username,
+      email: user.email,
+      role
+    })
 
   /*
   |--------------------------------------------------------------------------
   | RESPONSE
   |--------------------------------------------------------------------------
   */
-
   return {
     token,
+
     user: {
       id_user: user.id_user,
       id_store: user.id_store,
       nama_lengkap: user.nama_lengkap,
       username: user.username,
       email: user.email,
-      email_verified_at: user.email_verified_at,
+      email_verified_at:
+        user.email_verified_at,
       no_hp: user.no_hp,
       role,
-      status_akun: user.status_akun,
+      status_akun:
+        user.status_akun,
       foto: user.foto,
-      nama_toko: user.nama_toko,
-      logo_toko: user.logo_toko,
-      status_toko: user.status_toko,
-      id_business_category: user.id_business_category,
-      kategori_usaha: user.kategori_usaha
+
+      nama_toko:
+        user.nama_toko,
+
+      logo_toko:
+        user.logo_toko,
+
+      status_toko:
+        user.status_toko,
+
+      id_business_category:
+        user.id_business_category,
+
+      kategori_usaha:
+        user.kategori_usaha
     }
   }
 }
@@ -513,28 +940,63 @@ const login = async (data = {}) => {
 |--------------------------------------------------------------------------
 */
 const forgotPassword = async (data = {}) => {
-  const email = normalizeEmail(data.email)
+  const email =
+    normalizeEmail(data.email)
 
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDASI EMAIL
+  |--------------------------------------------------------------------------
+  */
   if (!email) {
-    throw new Error("Email wajib diisi")
+    throw new Error(
+      "Email wajib diisi"
+    )
   }
 
   if (!validateEmail(email)) {
-    throw new Error("Format email tidak valid")
+    throw new Error(
+      "Format email tidak valid"
+    )
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | RESPONSE GENERIK
+  |--------------------------------------------------------------------------
+  */
   const response = {
-    message: "Jika email terdaftar, kode OTP reset password akan dikirim ke email."
+    message:
+      "Jika email terdaftar, kode OTP reset password akan dikirim ke email."
   }
 
-  const user = await authModel.findUserByEmail(email)
+  /*
+  |--------------------------------------------------------------------------
+  | CARI USER
+  |--------------------------------------------------------------------------
+  */
+  const user =
+    await authModel.findUserByEmail(
+      email
+    )
 
   if (!user) {
     return response
   }
 
-  const otp = generateOtp()
+  /*
+  |--------------------------------------------------------------------------
+  | GENERATE OTP
+  |--------------------------------------------------------------------------
+  */
+  const otp =
+    generateOtp()
 
+  /*
+  |--------------------------------------------------------------------------
+  | SIMPAN OTP
+  |--------------------------------------------------------------------------
+  */
   await authModel.createAuthToken({
     id_user: user.id_user,
     token_hash: hashToken(otp),
@@ -542,9 +1004,15 @@ const forgotPassword = async (data = {}) => {
     expires_at: addMinutes(10)
   })
 
+  /*
+  |--------------------------------------------------------------------------
+  | KIRIM EMAIL
+  |--------------------------------------------------------------------------
+  */
   await mailService.sendResetPasswordEmail({
     email: user.email,
-    nama_lengkap: user.nama_lengkap,
+    nama_lengkap:
+      user.nama_lengkap,
     otp
   })
 
@@ -557,55 +1025,154 @@ const forgotPassword = async (data = {}) => {
 |--------------------------------------------------------------------------
 */
 const resetPassword = async (data = {}) => {
-  const email = normalizeEmail(data.email)
-  const otp = String(data.otp || "").trim()
-  const passwordBaru = String(data.password_baru || data.passwordBaru || "")
-  const konfirmasiPassword = String(data.konfirmasi_password || data.konfirmasiPassword || "")
+  const email =
+    normalizeEmail(data.email)
 
-  if (!email || !otp || !passwordBaru || !konfirmasiPassword) {
-    throw new Error("Email, OTP, password baru, dan konfirmasi password wajib diisi")
+  const otp =
+    String(data.otp || "").trim()
+
+  const passwordBaru =
+    String(
+      data.password_baru ||
+      data.passwordBaru ||
+      ""
+    )
+
+  const konfirmasiPassword =
+    String(
+      data.konfirmasi_password ||
+      data.konfirmasiPassword ||
+      ""
+    )
+
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDASI WAJIB
+  |--------------------------------------------------------------------------
+  */
+  if (
+    !email ||
+    !otp ||
+    !passwordBaru ||
+    !konfirmasiPassword
+  ) {
+    throw new Error(
+      "Email, OTP, password baru, dan konfirmasi password wajib diisi"
+    )
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDASI EMAIL
+  |--------------------------------------------------------------------------
+  */
   if (!validateEmail(email)) {
-    throw new Error("Format email tidak valid")
+    throw new Error(
+      "Format email tidak valid"
+    )
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDASI OTP
+  |--------------------------------------------------------------------------
+  */
   if (!/^\d{6}$/.test(otp)) {
-    throw new Error("Kode OTP harus terdiri dari 6 digit")
+    throw new Error(
+      "Kode OTP harus terdiri dari 6 digit"
+    )
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDASI PASSWORD BARU
+  |--------------------------------------------------------------------------
+  */
   if (passwordBaru.length < 6) {
-    throw new Error("Password baru minimal 6 karakter")
+    throw new Error(
+      "Password baru minimal 6 karakter"
+    )
   }
 
-  if (passwordBaru !== konfirmasiPassword) {
-    throw new Error("Konfirmasi password tidak sama")
+  /*
+  |--------------------------------------------------------------------------
+  | KONFIRMASI PASSWORD
+  |--------------------------------------------------------------------------
+  */
+  if (
+    passwordBaru !==
+    konfirmasiPassword
+  ) {
+    throw new Error(
+      "Konfirmasi password tidak sama"
+    )
   }
 
-  const otpData = await authModel.findValidResetOtp({
-    email,
-    otp_hash: hashToken(otp)
-  })
+  /*
+  |--------------------------------------------------------------------------
+  | CARI OTP VALID
+  |--------------------------------------------------------------------------
+  */
+  const otpData =
+    await authModel.findValidResetOtp({
+      email,
+      otp_hash:
+        hashToken(otp)
+    })
 
   if (!otpData) {
-    throw new Error("Kode OTP tidak valid, sudah digunakan, atau sudah kedaluwarsa")
+    throw new Error(
+      "Kode OTP tidak valid, sudah digunakan, atau sudah kedaluwarsa"
+    )
   }
 
-  const sameAsOldPassword = await bcrypt.compare(passwordBaru, otpData.password)
+  /*
+  |--------------------------------------------------------------------------
+  | PASSWORD BARU TIDAK BOLEH SAMA
+  |--------------------------------------------------------------------------
+  */
+  const sameAsOldPassword =
+    await bcrypt.compare(
+      passwordBaru,
+      otpData.password
+    )
+
   if (sameAsOldPassword) {
-    throw new Error("Password baru tidak boleh sama dengan password lama")
+    throw new Error(
+      "Password baru tidak boleh sama dengan password lama"
+    )
   }
 
-  const hashedPassword = await bcrypt.hash(passwordBaru, 10)
+  /*
+  |--------------------------------------------------------------------------
+  | HASH PASSWORD BARU
+  |--------------------------------------------------------------------------
+  */
+  const hashedPassword =
+    await bcrypt.hash(
+      passwordBaru,
+      10
+    )
 
+  /*
+  |--------------------------------------------------------------------------
+  | UPDATE PASSWORD
+  |--------------------------------------------------------------------------
+  */
   await authModel.resetPasswordWithToken({
-    id_user: otpData.id_user,
-    id_token: otpData.id_token,
-    hashed_password: hashedPassword
+    id_user:
+      otpData.id_user,
+
+    id_token:
+      otpData.id_token,
+
+    hashed_password:
+      hashedPassword
   })
 
   return {
-    message: "Password berhasil diubah. Silakan login menggunakan password baru."
+    message:
+      "Password berhasil diubah. Silakan login menggunakan password baru."
   }
 }
 
@@ -613,53 +1180,140 @@ const resetPassword = async (data = {}) => {
 |--------------------------------------------------------------------------
 | GET PROFILE
 |--------------------------------------------------------------------------
-| (Tidak berubah, sudah support semua role termasuk super_admin)
+| Support semua role termasuk super_admin.
 |--------------------------------------------------------------------------
 */
 const getProfile = async (id_user) => {
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDASI ID USER
+  |--------------------------------------------------------------------------
+  */
   if (!id_user) {
-    throw new Error("ID user tidak ditemukan")
+    throw new Error(
+      "ID user tidak ditemukan"
+    )
   }
 
-  const user = await authModel.findUserById(id_user)
+  /*
+  |--------------------------------------------------------------------------
+  | CARI USER
+  |--------------------------------------------------------------------------
+  */
+  const user =
+    await authModel.findUserById(
+      id_user
+    )
 
   if (!user) {
-    throw new Error("User tidak ditemukan")
+    throw new Error(
+      "User tidak ditemukan"
+    )
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | HAPUS PASSWORD
+  |--------------------------------------------------------------------------
+  */
   delete user.password
 
+  /*
+  |--------------------------------------------------------------------------
+  | RESPONSE PROFILE
+  |--------------------------------------------------------------------------
+  */
   return {
-    id_user: user.id_user,
-    id_store: user.id_store,
-    nama_lengkap: user.nama_lengkap,
-    username: user.username,
-    email: user.email,
-    email_verified_at: user.email_verified_at,
-    email_verified: Boolean(user.email_verified_at),
-    verification_email_sent_at: user.verification_email_sent_at,
-    no_hp: user.no_hp,
-    role: user.role,
-    status_akun: user.status_akun,
-    foto: user.foto,
-    last_login: user.last_login,
-    created_at: user.created_at,
-    updated_at: user.updated_at,
+    id_user:
+      user.id_user,
 
-    // Store
-    nama_toko: user.nama_toko,
-    alamat_toko: user.alamat_toko,
-    no_hp_toko: user.no_hp_toko,
-    email_toko: user.email_toko,
-    logo_toko: user.logo_toko,
-    status_toko: user.status_toko,
+    id_store:
+      user.id_store,
 
-    // Business category
-    id_business_category: user.id_business_category,
-    kategori_usaha: user.kategori_usaha,
+    nama_lengkap:
+      user.nama_lengkap,
 
-    // Owner
-    total_toko: Number(user.total_toko || 0)
+    username:
+      user.username,
+
+    email:
+      user.email,
+
+    email_verified_at:
+      user.email_verified_at,
+
+    email_verified:
+      Boolean(
+        user.email_verified_at
+      ),
+
+    verification_email_sent_at:
+      user.verification_email_sent_at,
+
+    no_hp:
+      user.no_hp,
+
+    role:
+      user.role,
+
+    status_akun:
+      user.status_akun,
+
+    foto:
+      user.foto,
+
+    last_login:
+      user.last_login,
+
+    created_at:
+      user.created_at,
+
+    updated_at:
+      user.updated_at,
+
+    /*
+    |--------------------------------------------------------------------------
+    | STORE
+    |--------------------------------------------------------------------------
+    */
+    nama_toko:
+      user.nama_toko,
+
+    alamat_toko:
+      user.alamat_toko,
+
+    no_hp_toko:
+      user.no_hp_toko,
+
+    email_toko:
+      user.email_toko,
+
+    logo_toko:
+      user.logo_toko,
+
+    status_toko:
+      user.status_toko,
+
+    /*
+    |--------------------------------------------------------------------------
+    | BUSINESS CATEGORY
+    |--------------------------------------------------------------------------
+    */
+    id_business_category:
+      user.id_business_category,
+
+    kategori_usaha:
+      user.kategori_usaha,
+
+    /*
+    |--------------------------------------------------------------------------
+    | OWNER
+    |--------------------------------------------------------------------------
+    */
+    total_toko:
+      Number(
+        user.total_toko || 0
+      )
   }
 }
 
@@ -669,13 +1323,23 @@ const getProfile = async (id_user) => {
 |--------------------------------------------------------------------------
 */
 const getBusinessCategories = async () => {
-  const categories = await authModel.getBusinessCategories()
+  const categories =
+    await authModel.getBusinessCategories()
+
   return {
-    message: "Kategori usaha berhasil diambil.",
-    data: categories
+    message:
+      "Kategori usaha berhasil diambil.",
+
+    data:
+      categories
   }
 }
 
+/*
+|--------------------------------------------------------------------------
+| EXPORT
+|--------------------------------------------------------------------------
+*/
 module.exports = {
   registerOwner,
   getBusinessCategories,
