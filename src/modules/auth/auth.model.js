@@ -451,16 +451,32 @@ const findFreePlan = async () => {
  */
 const ensureFreePlan = async () => {
   let plan = await findFreePlan()
+
   if (!plan) {
     const [result] = await pool.query(
       `INSERT INTO subscription_plans
        (nama_paket, deskripsi, durasi_hari, harga, batas_toko, batas_user, batas_produk, status_paket)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ['Free', 'Paket gratis tanpa batas waktu', 365, 0, 1, 3, 100, 'aktif']
+      [
+        'Free',
+        'Paket gratis selama 14 hari',
+        14,
+        0,
+        1,
+        3,
+        100,
+        'aktif'
+      ]
     )
-    const [rows] = await pool.query(`SELECT * FROM subscription_plans WHERE id_plan = ?`, [result.insertId])
+
+    const [rows] = await pool.query(
+      `SELECT * FROM subscription_plans WHERE id_plan = ?`,
+      [result.insertId]
+    )
+
     plan = rows[0]
   }
+
   return plan
 }
 
