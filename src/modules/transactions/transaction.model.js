@@ -1,4 +1,5 @@
-const pool = require("../../config/database")
+const pool = require("../../config/database");
+const notificationService = require("../notifications/notification.service");
 
 /*
 |--------------------------------------------------------------------------
@@ -36,10 +37,9 @@ const findAllByOwner = async (id_owner) => {
     ORDER BY t.id_transaction DESC
     `,
     [id_owner]
-  )
-
-  return rows
-}
+  );
+  return rows;
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -77,10 +77,9 @@ const findAllByStore = async (id_store) => {
     ORDER BY t.id_transaction DESC
     `,
     [id_store]
-  )
-
-  return rows
-}
+  );
+  return rows;
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -91,50 +90,43 @@ const findById = async (id_transaction) => {
   const [rows] = await pool.query(
     `
     SELECT
-    t.id_transaction,
-    t.id_store,
-
-    s.id_owner,
-    s.id_business_category,
-
-    s.nama_toko,
-    s.alamat,
-    s.no_hp,
-    s.email,
-    s.logo,
-    s.status_toko,
-
-    t.id_user,
-    u.nama_lengkap AS nama_kasir,
-
-    t.kode_transaksi,
-    t.total_item,
-    t.total_qty,
-    t.subtotal,
-    t.diskon,
-    t.pajak,
-    t.ppn_persen,
-    t.grand_total,
-    t.metode_pembayaran,
-    t.jumlah_bayar,
-    t.kembalian,
-    t.status_transaksi,
-    t.catatan,
-    t.created_at,
-    t.updated_at
-FROM transactions t
-INNER JOIN stores s
-    ON s.id_store = t.id_store
-LEFT JOIN users u
-    ON u.id_user = t.id_user
-WHERE t.id_transaction = ?
-LIMIT 1
+      t.id_transaction,
+      t.id_store,
+      s.id_owner,
+      s.id_business_category,
+      s.nama_toko,
+      s.alamat,
+      s.no_hp,
+      s.email,
+      s.logo,
+      s.status_toko,
+      t.id_user,
+      u.nama_lengkap AS nama_kasir,
+      t.kode_transaksi,
+      t.total_item,
+      t.total_qty,
+      t.subtotal,
+      t.diskon,
+      t.pajak,
+      t.ppn_persen,
+      t.grand_total,
+      t.metode_pembayaran,
+      t.jumlah_bayar,
+      t.kembalian,
+      t.status_transaksi,
+      t.catatan,
+      t.created_at,
+      t.updated_at
+    FROM transactions t
+    INNER JOIN stores s ON s.id_store = t.id_store
+    LEFT JOIN users u ON u.id_user = t.id_user
+    WHERE t.id_transaction = ?
+    LIMIT 1
     `,
     [id_transaction]
-  )
-
-  return rows.length ? rows[0] : null
-}
+  );
+  return rows.length ? rows[0] : null;
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -142,9 +134,6 @@ LIMIT 1
 |--------------------------------------------------------------------------
 */
 const findItemsByTransactionId = async (id_transaction) => {
-  // =====================================================
-  // AMBIL ITEM TRANSAKSI
-  // =====================================================
   const [items] = await pool.query(
     `
     SELECT
@@ -168,18 +157,12 @@ const findItemsByTransactionId = async (id_transaction) => {
     ORDER BY id_transaction_item ASC
     `,
     [id_transaction]
-  )
+  );
 
-  if (!items.length) {
-    return []
-  }
+  if (!items.length) return [];
 
-  // =====================================================
-  // AMBIL SEMUA VARIAN SEKALIGUS
-  // =====================================================
-  const ids = items.map(item => item.id_transaction_item)
-
-  const placeholders = ids.map(() => "?").join(",")
+  const ids = items.map(item => item.id_transaction_item);
+  const placeholders = ids.map(() => "?").join(",");
 
   const [variants] = await pool.query(
     `
@@ -194,37 +177,27 @@ const findItemsByTransactionId = async (id_transaction) => {
     ORDER BY id_transaction_item ASC
     `,
     ids
-  )
+  );
 
-  // =====================================================
-  // GROUP VARIAN BERDASARKAN ITEM
-  // =====================================================
-  const variantMap = {}
-
+  const variantMap = {};
   for (const variant of variants) {
     if (!variantMap[variant.id_transaction_item]) {
-      variantMap[variant.id_transaction_item] = []
+      variantMap[variant.id_transaction_item] = [];
     }
-
     variantMap[variant.id_transaction_item].push({
       id_variant_option: variant.id_variant_option,
       nama_group: variant.nama_group,
       nama_option: variant.nama_option,
-      tambahan_harga: Number(
-        variant.tambahan_harga || 0
-      )
-    })
+      tambahan_harga: Number(variant.tambahan_harga || 0),
+    });
   }
 
-  // =====================================================
-  // GABUNGKAN KE ITEM
-  // =====================================================
   return items.map(item => ({
     ...item,
-    variants:
-      variantMap[item.id_transaction_item] || []
-  }))
-}
+    variants: variantMap[item.id_transaction_item] || [],
+  }));
+};
+
 /*
 |--------------------------------------------------------------------------
 | FIND STORE BY ID AND OWNER
@@ -247,16 +220,13 @@ const findStoreByIdAndOwner = async (id_store, id_owner) => {
     LIMIT 1
     `,
     [id_store, id_owner]
-  )
-
-  return rows[0] || null
-}
+  );
+  return rows[0] || null;
+};
 
 /*
 |--------------------------------------------------------------------------
-| FIND STORE BY ID
-|--------------------------------------------------------------------------
-| Dipakai service untuk mengambil PPN toko.
+| FIND STORE BY ID (untuk mengambil owner dan info toko)
 |--------------------------------------------------------------------------
 */
 const findStoreById = async (id_store) => {
@@ -275,10 +245,9 @@ const findStoreById = async (id_store) => {
     LIMIT 1
     `,
     [id_store]
-  )
-
-  return rows[0] || null
-}
+  );
+  return rows[0] || null;
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -286,12 +255,11 @@ const findStoreById = async (id_store) => {
 |--------------------------------------------------------------------------
 */
 const generateTransactionCode = async (id_store, connection = pool) => {
-  const date = new Date()
-  const yyyy = date.getFullYear()
-  const mm = String(date.getMonth() + 1).padStart(2, "0")
-  const dd = String(date.getDate()).padStart(2, "0")
-
-  const prefix = `TRX-${yyyy}${mm}${dd}`
+  const date = new Date();
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const prefix = `TRX-${yyyy}${mm}${dd}`;
 
   const [rows] = await connection.query(
     `
@@ -301,35 +269,25 @@ const generateTransactionCode = async (id_store, connection = pool) => {
       AND DATE(created_at) = CURDATE()
     `,
     [id_store]
-  )
+  );
 
-  const number = Number(rows[0].total) + 1
-  const sequence = String(number).padStart(4, "0")
-
-  return `${prefix}-${sequence}`
-}
+  const number = Number(rows[0].total) + 1;
+  const sequence = String(number).padStart(4, "0");
+  return `${prefix}-${sequence}`;
+};
 
 /*
 |--------------------------------------------------------------------------
-| CREATE TRANSACTION WITH ITEMS
-|--------------------------------------------------------------------------
-| data.subtotal     = total harga asli sebelum diskon
-| data.diskon       = total diskon produk
-| data.pajak        = nilai PPN rupiah
-| data.ppn_persen   = persen PPN dari store
-| data.grand_total  = total akhir
+| CREATE TRANSACTION WITH ITEMS (dengan notifikasi)
 |--------------------------------------------------------------------------
 */
 const createTransaction = async (data) => {
-  const connection = await pool.getConnection()
+  const connection = await pool.getConnection();
 
   try {
-    await connection.beginTransaction()
+    await connection.beginTransaction();
 
-    const kodeTransaksi = await generateTransactionCode(
-      data.id_store,
-      connection
-    )
+    const kodeTransaksi = await generateTransactionCode(data.id_store, connection);
 
     const [trxResult] = await connection.query(
       `
@@ -367,16 +325,13 @@ const createTransaction = async (data) => {
         data.metode_pembayaran,
         data.jumlah_bayar,
         data.kembalian,
-        data.catatan || null
+        data.catatan || null,
       ]
-    )
+    );
 
-    const idTransaction = trxResult.insertId
+    const idTransaction = trxResult.insertId;
 
-    // =====================================================
-    // SIMPAN ITEM TRANSAKSI
-    // =====================================================
-
+    // Simpan item dan varian
     for (const item of data.items) {
       const [itemResult] = await connection.query(
         `
@@ -401,35 +356,23 @@ const createTransaction = async (data) => {
         [
           idTransaction,
           item.id_product,
-
           item.kode_produk || "",
           item.nama_produk || "",
-
           Number(item.harga_asli || 0),
-
           item.id_discount || null,
           item.nama_diskon || null,
           item.tipe_diskon || null,
-
           Number(item.nilai_diskon || 0),
           Number(item.diskon || 0),
-
           Number(item.harga_jual || 0),
           Number(item.qty || 1),
-          Number(item.subtotal || 0)
+          Number(item.subtotal || 0),
         ]
-      )
+      );
 
-      const idTransactionItem = itemResult.insertId
+      const idTransactionItem = itemResult.insertId;
 
-      // =====================================================
-      // SIMPAN VARIAN
-      // =====================================================
-
-      if (
-        Array.isArray(item.variants) &&
-        item.variants.length > 0
-      ) {
+      if (Array.isArray(item.variants) && item.variants.length > 0) {
         for (const variant of item.variants) {
           await connection.query(
             `
@@ -448,38 +391,72 @@ const createTransaction = async (data) => {
               variant.id_variant_option,
               variant.nama_group,
               variant.nama_option,
-              Number(variant.tambahan_harga || 0)
+              Number(variant.tambahan_harga || 0),
             ]
-          )
+          );
         }
       }
     }
 
-    await connection.commit()
+    await connection.commit();
+
+    // ============================================================
+    // KIRIM NOTIFIKASI KE FIRESTORE (setelah commit sukses)
+    // ============================================================
+    try {
+      // Ambil owner dari store
+      const store = await findStoreById(data.id_store);
+      if (store && store.id_owner) {
+        const idOwner = store.id_owner;
+
+        // Notifikasi pesanan baru
+        await notificationService.notifyNewOrder({
+          idUser: idOwner,
+          idStore: data.id_store,
+          idTransaction: idTransaction,
+          kodeTransaksi: kodeTransaksi,
+          namaPelanggan: null, // bisa diisi jika ada
+          grandTotal: data.grand_total,
+        });
+
+        // Notifikasi pembayaran berhasil (jika transaksi selesai)
+        await notificationService.notifyPaymentSuccess({
+          idUser: idOwner,
+          idStore: data.id_store,
+          idTransaction: idTransaction,
+          kodeTransaksi: kodeTransaksi,
+          grandTotal: data.grand_total,
+        });
+
+        console.log(`✅ Notifikasi transaksi ${kodeTransaksi} dikirim ke Firestore`);
+      }
+    } catch (notifError) {
+      // Notifikasi gagal tidak menggagalkan transaksi
+      console.error("❌ Gagal mengirim notifikasi transaksi:", notifError);
+    }
 
     return {
       id_transaction: idTransaction,
-      kode_transaksi: kodeTransaksi
-    }
+      kode_transaksi: kodeTransaksi,
+    };
   } catch (error) {
-    await connection.rollback()
-    throw error
+    await connection.rollback();
+    throw error;
   } finally {
-    connection.release()
+    connection.release();
   }
-}
+};
+
 /*
 |--------------------------------------------------------------------------
-| CANCEL TRANSACTION
-|--------------------------------------------------------------------------
-| Membatalkan transaksi tanpa mengembalikan stok.
+| CANCEL TRANSACTION (dengan notifikasi)
 |--------------------------------------------------------------------------
 */
 const cancelTransaction = async (id_transaction, data) => {
-  const connection = await pool.getConnection()
+  const connection = await pool.getConnection();
 
   try {
-    await connection.beginTransaction()
+    await connection.beginTransaction();
 
     const [trxRows] = await connection.query(
       `
@@ -495,17 +472,11 @@ const cancelTransaction = async (id_transaction, data) => {
       FOR UPDATE
       `,
       [id_transaction]
-    )
+    );
 
-    const trx = trxRows[0] || null
-
-    if (!trx) {
-      throw new Error("Transaksi tidak ditemukan")
-    }
-
-    if (trx.status_transaksi === "dibatalkan") {
-      throw new Error("Transaksi sudah dibatalkan")
-    }
+    const trx = trxRows[0] || null;
+    if (!trx) throw new Error("Transaksi tidak ditemukan");
+    if (trx.status_transaksi === "dibatalkan") throw new Error("Transaksi sudah dibatalkan");
 
     await connection.query(
       `
@@ -515,26 +486,42 @@ const cancelTransaction = async (id_transaction, data) => {
         catatan = ?
       WHERE id_transaction = ?
       `,
-      [
-        data.catatan || "Transaksi dibatalkan",
-        id_transaction
-      ]
-    )
+      [data.catatan || "Transaksi dibatalkan", id_transaction]
+    );
 
-    await connection.commit()
+    await connection.commit();
+
+    // ============================================================
+    // KIRIM NOTIFIKASI PEMBATALAN KE FIRESTORE
+    // ============================================================
+    try {
+      // Ambil owner dari store
+      const store = await findStoreById(trx.id_store);
+      if (store && store.id_owner) {
+        await notificationService.notifyTransactionCancelled({
+          idUser: store.id_owner,
+          idStore: trx.id_store,
+          idTransaction: id_transaction,
+          kodeTransaksi: trx.kode_transaksi,
+        });
+        console.log(`✅ Notifikasi pembatalan transaksi ${trx.kode_transaksi} dikirim ke Firestore`);
+      }
+    } catch (notifError) {
+      console.error("❌ Gagal mengirim notifikasi pembatalan:", notifError);
+    }
 
     return {
       id_transaction: Number(id_transaction),
       kode_transaksi: trx.kode_transaksi,
-      status_transaksi: "dibatalkan"
-    }
+      status_transaksi: "dibatalkan",
+    };
   } catch (error) {
-    await connection.rollback()
-    throw error
+    await connection.rollback();
+    throw error;
   } finally {
-    connection.release()
+    connection.release();
   }
-}
+};
 
 module.exports = {
   findAllByOwner,
@@ -544,5 +531,5 @@ module.exports = {
   findStoreByIdAndOwner,
   findStoreById,
   createTransaction,
-  cancelTransaction
-}
+  cancelTransaction,
+};

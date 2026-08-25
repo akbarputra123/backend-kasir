@@ -1,768 +1,413 @@
-const pool = require("../../config/database");
+const { db } = require("../../config/firebase");
+const { FieldValue } = require("firebase-admin/firestore");
 
+// ----------------------------
+// KONSTANTA KOLEKSI
+// ----------------------------
+const NOTIFICATIONS_COLLECTION = "notifications";
+const SUBSCRIPTIONS_COLLECTION = "subscriptions";
+const SUBSCRIPTION_PLANS_COLLECTION = "subscription_plans";
+
+// ----------------------------
+// UTILITY
+// ----------------------------
 const parsePositiveInt = (value, fallback, max = null) => {
-    let number = Number.parseInt(value, 10);
-
-    if (!Number.isInteger(number) || number < 0) {
-        number = fallback;
-    }
-
-    if (max !== null && number > max) {
-        number = max;
-    }
-
-    return number;
+  let number = Number.parseInt(value, 10);
+  if (!Number.isInteger(number) || number < 0) {
+    number = fallback;
+  }
+  if (max !== null && number > max) {
+    number = max;
+  }
+  return number;
 };
 
 const parseLimit = (value, fallback = 20) => {
-    return parsePositiveInt(value, fallback, 100);
+  return parsePositiveInt(value, fallback, 100);
 };
 
 const parseOffset = (value, fallback = 0) => {
-    return parsePositiveInt(value, fallback);
+  return parsePositiveInt(value, fallback);
 };
 
-const findAllByUser = async ({
-    idUser,
-    idStore = null,
-    limit = 20,
-    offset = 0,
-}) => {
-    const safeLimit = parseLimit(limit);
-    const safeOffset = parseOffset(offset);
+// ----------------------------
+// NOTIFICATIONS (FIRESTORE)
+// ----------------------------
 
-    let query = `
-        SELECT
-            n.id_notification,
-            n.id_user,
-            n.id_store,
-            n.tipe,
-            n.judul,
-            n.pesan,
-            n.reference_type,
-            n.reference_id,
-            n.is_read,
-            n.read_at,
-            n.created_at
-        FROM notifications n
-        WHERE n.id_user = ?
-    `;
-
-    const params = [idUser];
-
-    if (idStore !== null && idStore !== undefined) {
-        query += `
-            AND (
-                n.id_store = ?
-                OR n.id_store IS NULL
-            )
-        `;
-
-        params.push(idStore);
-    }
-
-    query += `
-        ORDER BY n.created_at DESC
-        LIMIT ${safeLimit}
-        OFFSET ${safeOffset}
-    `;
-
-    const [rows] = await pool.execute(query, params);
-
-    return rows;
+/**
+ * Konversi dokumen Firestore ke object notifikasi
+ */
+const docToNotification = (doc) => {
+  const data = doc.data();
+  return {
+    id_notification: doc.id,
+    id_user: data.id_user,
+    id_store: data.id_store === "__global__" ? null : data.id_store,
+    tipe: data.tipe,
+    judul: data.judul,
+    pesan: data.pesan,
+    reference_type: data.reference_type || null,
+    reference_id: data.reference_id || null,
+    is_read: data.is_read || false,
+    read_at: data.read_at ? data.read_at.toDate().toISOString() : null,
+    created_at: data.created_at ? data.created_at.toDate().toISOString() : null,
+  };
 };
 
-const findUnreadByUser = async ({
-    idUser,
-    idStore = null,
-    limit = 20,
-    offset = 0,
-}) => {
-    const safeLimit = parseLimit(limit);
-    const safeOffset = parseOffset(offset);
-
-    let query = `
-        SELECT
-            n.id_notification,
-            n.id_user,
-            n.id_store,
-            n.tipe,
-            n.judul,
-            n.pesan,
-            n.reference_type,
-            n.reference_id,
-            n.is_read,
-            n.read_at,
-            n.created_at
-        FROM notifications n
-        WHERE n.id_user = ?
-          AND n.is_read = FALSE
-    `;
-
-    const params = [idUser];
-
-    if (idStore !== null && idStore !== undefined) {
-        query += `
-            AND (
-                n.id_store = ?
-                OR n.id_store IS NULL
-            )
-        `;
-
-        params.push(idStore);
-    }
-
-    query += `
-        ORDER BY n.created_at DESC
-        LIMIT ${safeLimit}
-        OFFSET ${safeOffset}
-    `;
-
-    const [rows] = await pool.execute(query, params);
-
-    return rows;
+/**
+ * Bangun query dasar notifikasi dengan filter
+ */
+const buildNotificationQuery = (baseQuery, { idUser, idStore = null, isRead = null }) => {
+  let query = baseQuery.where("id_user", "==", idUser);
+  if (idStore !== null && idStore !== undefined) {
+    query = query.where("id_store", "in", [idStore, "__global__"]);
+  }
+  if (isRead !== null) {
+    query = query.where("is_read", "==", isRead);
+  }
+  return query;
 };
 
-const countUnreadByUser = async ({
-    idUser,
-    idStore = null,
-}) => {
-    let query = `
-        SELECT
-            COUNT(*) AS total
-        FROM notifications
-        WHERE id_user = ?
-          AND is_read = FALSE
-    `;
+const findAllByUser = async ({ idUser, idStore = null, limit = 20, offset = 0 }) => {
+  const safeLimit = parseLimit(limit);
+  const safeOffset = parseOffset(offset);
 
-    const params = [idUser];
+  let query = db.collection(NOTIFICATIONS_COLLECTION);
+  query = buildNotificationQuery(query, { idUser, idStore });
+  query = query.orderBy("created_at", "desc");
 
-    if (idStore !== null && idStore !== undefined) {
-        query += `
-            AND (
-                id_store = ?
-                OR id_store IS NULL
-            )
-        `;
-
-        params.push(idStore);
-    }
-
-    const [rows] = await pool.execute(query, params);
-
-    return Number(rows[0]?.total || 0);
+  const snapshot = await query.limit(safeOffset + safeLimit).get();
+  const docs = snapshot.docs.slice(safeOffset);
+  return docs.map(docToNotification);
 };
 
-const findById = async ({
-    idNotification,
-    idUser,
-}) => {
-    const [rows] = await pool.execute(
-        `
-        SELECT
-            n.id_notification,
-            n.id_user,
-            n.id_store,
-            n.tipe,
-            n.judul,
-            n.pesan,
-            n.reference_type,
-            n.reference_id,
-            n.is_read,
-            n.read_at,
-            n.created_at
-        FROM notifications n
-        WHERE n.id_notification = ?
-          AND n.id_user = ?
-        LIMIT 1
-        `,
-        [
-            idNotification,
-            idUser,
-        ]
-    );
+const findUnreadByUser = async ({ idUser, idStore = null, limit = 20, offset = 0 }) => {
+  const safeLimit = parseLimit(limit);
+  const safeOffset = parseOffset(offset);
 
-    return rows[0] || null;
+  let query = db.collection(NOTIFICATIONS_COLLECTION);
+  query = buildNotificationQuery(query, { idUser, idStore, isRead: false });
+  query = query.orderBy("created_at", "desc");
+
+  const snapshot = await query.limit(safeOffset + safeLimit).get();
+  const docs = snapshot.docs.slice(safeOffset);
+  return docs.map(docToNotification);
+};
+
+const countUnreadByUser = async ({ idUser, idStore = null }) => {
+  let query = db.collection(NOTIFICATIONS_COLLECTION);
+  query = buildNotificationQuery(query, { idUser, idStore, isRead: false });
+  const snapshot = await query.get();
+  return snapshot.size;
+};
+
+const findById = async ({ idNotification, idUser }) => {
+  const doc = await db.collection(NOTIFICATIONS_COLLECTION).doc(idNotification).get();
+  if (!doc.exists) return null;
+  const data = doc.data();
+  if (data.id_user !== idUser) return null;
+  return docToNotification(doc);
 };
 
 const create = async ({
-    idUser,
-    idStore = null,
+  idUser,
+  idStore = null,
+  tipe,
+  judul,
+  pesan,
+  referenceType = null,
+  referenceId = null,
+}) => {
+  const now = FieldValue.serverTimestamp();
+  const data = {
+    id_user: idUser,
+    id_store: idStore === null ? "__global__" : idStore,
     tipe,
     judul,
     pesan,
-    referenceType = null,
-    referenceId = null,
-}) => {
-    const [result] = await pool.execute(
-        `
-        INSERT INTO notifications (
-            id_user,
-            id_store,
-            tipe,
-            judul,
-            pesan,
-            reference_type,
-            reference_id,
-            is_read,
-            read_at
-        )
-        VALUES (
-            ?,
-            ?,
-            ?,
-            ?,
-            ?,
-            ?,
-            ?,
-            FALSE,
-            NULL
-        )
-        `,
-        [
-            idUser,
-            idStore,
-            tipe,
-            judul,
-            pesan,
-            referenceType,
-            referenceId,
-        ]
-    );
+    reference_type: referenceType,
+    reference_id: referenceId,
+    is_read: false,
+    read_at: null,
+    created_at: now,
+  };
+  const docRef = await db.collection(NOTIFICATIONS_COLLECTION).add(data);
+  const newDoc = await docRef.get();
+  return docToNotification(newDoc);
+};
 
+const findByReference = async ({ idUser, tipe, referenceType, referenceId }) => {
+  const snapshot = await db.collection(NOTIFICATIONS_COLLECTION)
+    .where("id_user", "==", idUser)
+    .where("tipe", "==", tipe)
+    .where("reference_type", "==", referenceType)
+    .where("reference_id", "==", referenceId)
+    .orderBy("created_at", "desc")
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return null;
+  return docToNotification(snapshot.docs[0]);
+};
+
+const createIfNotExists = async (params) => {
+  const existing = await findByReference(params);
+  if (existing) {
     return {
-        id_notification: result.insertId,
-        id_user: idUser,
-        id_store: idStore,
-        tipe,
-        judul,
-        pesan,
-        reference_type: referenceType,
-        reference_id: referenceId,
-        is_read: false,
-        read_at: null,
+      created: false,
+      existing: true,
+      notification: existing,
     };
+  }
+  const notification = await create(params);
+  return {
+    created: true,
+    existing: false,
+    notification,
+  };
 };
 
-const findByReference = async ({
-    idUser,
-    tipe,
-    referenceType,
-    referenceId,
-}) => {
-    const [rows] = await pool.execute(
-        `
-        SELECT
-            id_notification,
-            id_user,
-            id_store,
-            tipe,
-            judul,
-            pesan,
-            reference_type,
-            reference_id,
-            is_read,
-            read_at,
-            created_at
-        FROM notifications
-        WHERE id_user = ?
-          AND tipe = ?
-          AND reference_type = ?
-          AND reference_id = ?
-        ORDER BY id_notification DESC
-        LIMIT 1
-        `,
-        [
-            idUser,
-            tipe,
-            referenceType,
-            referenceId,
-        ]
-    );
+const markAsRead = async ({ idNotification, idUser }) => {
+  const docRef = db.collection(NOTIFICATIONS_COLLECTION).doc(idNotification);
+  const doc = await docRef.get();
+  if (!doc.exists) return false;
+  const data = doc.data();
+  if (data.id_user !== idUser || data.is_read) return false;
 
-    return rows[0] || null;
+  await docRef.update({
+    is_read: true,
+    read_at: FieldValue.serverTimestamp(),
+  });
+  return true;
 };
 
-const createIfNotExists = async ({
-    idUser,
-    idStore = null,
-    tipe,
-    judul,
-    pesan,
-    referenceType = null,
-    referenceId = null,
-}) => {
-    const existing = await findByReference({
-        idUser,
-        tipe,
-        referenceType,
-        referenceId,
+const markAllAsRead = async ({ idUser, idStore = null }) => {
+  let query = db.collection(NOTIFICATIONS_COLLECTION);
+  query = buildNotificationQuery(query, { idUser, idStore, isRead: false });
+
+  const snapshot = await query.get();
+  if (snapshot.empty) return 0;
+
+  const batch = db.batch();
+  snapshot.docs.forEach((doc) => {
+    batch.update(doc.ref, {
+      is_read: true,
+      read_at: FieldValue.serverTimestamp(),
     });
-
-    if (existing) {
-        return {
-            created: false,
-            existing: true,
-            notification: existing,
-        };
-    }
-
-    const notification = await create({
-        idUser,
-        idStore,
-        tipe,
-        judul,
-        pesan,
-        referenceType,
-        referenceId,
-    });
-
-    return {
-        created: true,
-        existing: false,
-        notification,
-    };
+  });
+  await batch.commit();
+  return snapshot.size;
 };
 
-const markAsRead = async ({
-    idNotification,
-    idUser,
-}) => {
-    const [result] = await pool.execute(
-        `
-        UPDATE notifications
-        SET
-            is_read = TRUE,
-            read_at = CURRENT_TIMESTAMP
-        WHERE id_notification = ?
-          AND id_user = ?
-          AND is_read = FALSE
-        `,
-        [
-            idNotification,
-            idUser,
-        ]
-    );
+const remove = async ({ idNotification, idUser }) => {
+  const docRef = db.collection(NOTIFICATIONS_COLLECTION).doc(idNotification);
+  const doc = await docRef.get();
+  if (!doc.exists) return false;
+  if (doc.data().id_user !== idUser) return false;
 
-    return result.affectedRows > 0;
+  await docRef.delete();
+  return true;
 };
 
-const markAllAsRead = async ({
-    idUser,
-    idStore = null,
-}) => {
-    let query = `
-        UPDATE notifications
-        SET
-            is_read = TRUE,
-            read_at = CURRENT_TIMESTAMP
-        WHERE id_user = ?
-          AND is_read = FALSE
-    `;
+const removeAllRead = async ({ idUser, idStore = null }) => {
+  let query = db.collection(NOTIFICATIONS_COLLECTION);
+  query = buildNotificationQuery(query, { idUser, idStore, isRead: true });
 
-    const params = [idUser];
+  const snapshot = await query.get();
+  if (snapshot.empty) return 0;
 
-    if (idStore !== null && idStore !== undefined) {
-        query += `
-            AND (
-                id_store = ?
-                OR id_store IS NULL
-            )
-        `;
-
-        params.push(idStore);
-    }
-
-    const [result] = await pool.execute(
-        query,
-        params
-    );
-
-    return result.affectedRows;
+  const batch = db.batch();
+  snapshot.docs.forEach((doc) => {
+    batch.delete(doc.ref);
+  });
+  await batch.commit();
+  return snapshot.size;
 };
 
-const remove = async ({
-    idNotification,
-    idUser,
-}) => {
-    const [result] = await pool.execute(
-        `
-        DELETE FROM notifications
-        WHERE id_notification = ?
-          AND id_user = ?
-        `,
-        [
-            idNotification,
-            idUser,
-        ]
-    );
-
-    return result.affectedRows > 0;
+const exists = async ({ idNotification, idUser }) => {
+  const doc = await db.collection(NOTIFICATIONS_COLLECTION).doc(idNotification).get();
+  if (!doc.exists) return false;
+  return doc.data().id_user === idUser;
 };
 
-const removeAllRead = async ({
-    idUser,
-    idStore = null,
-}) => {
-    let query = `
-        DELETE FROM notifications
-        WHERE id_user = ?
-          AND is_read = TRUE
-    `;
+const findLatestByUser = async ({ idUser, idStore = null, limit = 5 }) => {
+  const safeLimit = parseLimit(limit, 5);
 
-    const params = [idUser];
+  let query = db.collection(NOTIFICATIONS_COLLECTION);
+  query = buildNotificationQuery(query, { idUser, idStore });
+  query = query.orderBy("created_at", "desc").limit(safeLimit);
 
-    if (idStore !== null && idStore !== undefined) {
-        query += `
-            AND (
-                id_store = ?
-                OR id_store IS NULL
-            )
-        `;
-
-        params.push(idStore);
-    }
-
-    const [result] = await pool.execute(
-        query,
-        params
-    );
-
-    return result.affectedRows;
+  const snapshot = await query.get();
+  return snapshot.docs.map(docToNotification);
 };
 
-const exists = async ({
-    idNotification,
-    idUser,
-}) => {
-    const [rows] = await pool.execute(
-        `
-        SELECT
-            id_notification
-        FROM notifications
-        WHERE id_notification = ?
-          AND id_user = ?
-        LIMIT 1
-        `,
-        [
-            idNotification,
-            idUser,
-        ]
-    );
+// ----------------------------
+// SUBSCRIPTIONS (FIRESTORE)
+// ----------------------------
 
-    return rows.length > 0;
+/**
+ * Konversi dokumen subscription ke object dengan informasi plan (denormalisasi)
+ * Asumsi saat create/update subscription, field plan_nama dan plan_durasi_hari disimpan langsung.
+ */
+const docToSubscription = (doc) => {
+  const data = doc.data();
+  return {
+    id_subscription: doc.id,
+    id_owner: data.id_owner,
+    id_plan: data.id_plan,
+    jenis: data.jenis,
+    parent_subscription: data.parent_subscription || null,
+    jumlah_bulan: data.jumlah_bulan,
+    kode_invoice: data.kode_invoice,
+    tanggal_mulai: data.tanggal_mulai ? data.tanggal_mulai.toDate().toISOString() : null,
+    tanggal_berakhir: data.tanggal_berakhir ? data.tanggal_berakhir.toDate().toISOString() : null,
+    harga: data.harga,
+    status_langganan: data.status_langganan,
+    metode_pembayaran: data.metode_pembayaran,
+    bukti_pembayaran: data.bukti_pembayaran || null,
+    catatan: data.catatan || null,
+    created_at: data.created_at ? data.created_at.toDate().toISOString() : null,
+    updated_at: data.updated_at ? data.updated_at.toDate().toISOString() : null,
+    // denormalisasi dari plan
+    nama_paket: data.nama_paket,
+    durasi_hari: data.durasi_hari,
+    deskripsi: data.deskripsi || null,
+  };
 };
 
-const findLatestByUser = async ({
-    idUser,
-    idStore = null,
-    limit = 5,
-}) => {
-    const safeLimit = parseLimit(limit, 5);
+/**
+ * Ambil subscription aktif milik owner (paling akhir berdasarkan tanggal_berakhir)
+ */
+const findActiveSubscriptionByOwner = async ({ idOwner }) => {
+  const snapshot = await db.collection(SUBSCRIPTIONS_COLLECTION)
+    .where("id_owner", "==", idOwner)
+    .where("status_langganan", "==", "aktif")
+    .orderBy("tanggal_berakhir", "desc")
+    .limit(1)
+    .get();
 
-    let query = `
-        SELECT
-            n.id_notification,
-            n.id_user,
-            n.id_store,
-            n.tipe,
-            n.judul,
-            n.pesan,
-            n.reference_type,
-            n.reference_id,
-            n.is_read,
-            n.read_at,
-            n.created_at
-        FROM notifications n
-        WHERE n.id_user = ?
-    `;
-
-    const params = [idUser];
-
-    if (idStore !== null && idStore !== undefined) {
-        query += `
-            AND (
-                n.id_store = ?
-                OR n.id_store IS NULL
-            )
-        `;
-
-        params.push(idStore);
-    }
-
-    query += `
-        ORDER BY n.created_at DESC
-        LIMIT ${safeLimit}
-    `;
-
-    const [rows] = await pool.execute(query, params);
-
-    return rows;
+  if (snapshot.empty) return null;
+  return docToSubscription(snapshot.docs[0]);
 };
 
-const findActiveSubscriptionByOwner = async ({
-    idOwner,
-}) => {
-    const [rows] = await pool.execute(
-        `
-        SELECT
-            s.id_subscription,
-            s.id_owner,
-            s.id_plan,
-            s.jenis,
-            s.parent_subscription,
-            s.jumlah_bulan,
-            s.kode_invoice,
-            s.tanggal_mulai,
-            s.tanggal_berakhir,
-            s.harga,
-            s.status_langganan,
-            s.metode_pembayaran,
-            p.nama_paket,
-            p.durasi_hari
-        FROM subscriptions s
-        INNER JOIN subscription_plans p
-            ON p.id_plan = s.id_plan
-        WHERE s.id_owner = ?
-          AND s.status_langganan = 'aktif'
-        ORDER BY
-            s.tanggal_berakhir DESC,
-            s.id_subscription DESC
-        LIMIT 1
-        `,
-        [
-            idOwner,
-        ]
-    );
-
-    return rows[0] || null;
+/**
+ * Ambil subscription berdasarkan ID (opsional filter idOwner)
+ */
+const findSubscriptionById = async ({ idSubscription, idOwner = null }) => {
+  const docRef = db.collection(SUBSCRIPTIONS_COLLECTION).doc(idSubscription);
+  const doc = await docRef.get();
+  if (!doc.exists) return null;
+  const data = doc.data();
+  if (idOwner !== null && idOwner !== undefined && data.id_owner !== idOwner) {
+    return null;
+  }
+  return docToSubscription(doc);
 };
 
-const findSubscriptionById = async ({
-    idSubscription,
-    idOwner = null,
-}) => {
-    let query = `
-        SELECT
-            s.id_subscription,
-            s.id_owner,
-            s.id_plan,
-            s.jenis,
-            s.parent_subscription,
-            s.jumlah_bulan,
-            s.kode_invoice,
-            s.tanggal_mulai,
-            s.tanggal_berakhir,
-            s.harga,
-            s.status_langganan,
-            s.metode_pembayaran,
-            s.bukti_pembayaran,
-            s.catatan,
-            s.created_at,
-            s.updated_at,
-            p.nama_paket,
-            p.durasi_hari,
-            p.deskripsi
-        FROM subscriptions s
-        INNER JOIN subscription_plans p
-            ON p.id_plan = s.id_plan
-        WHERE s.id_subscription = ?
-    `;
+/**
+ * Ambil subscription yang akan kadaluwarsa dalam `days` hari ke depan
+ */
+const findSubscriptionsExpiring = async ({ days = 7 }) => {
+  const safeDays = Math.max(1, Math.min(Number.parseInt(days, 10) || 7, 365));
+  const now = new Date();
+  const future = new Date(now.getTime() + safeDays * 24 * 60 * 60 * 1000);
 
-    const params = [idSubscription];
+  const snapshot = await db.collection(SUBSCRIPTIONS_COLLECTION)
+    .where("status_langganan", "==", "aktif")
+    .where("tanggal_berakhir", ">", now)
+    .where("tanggal_berakhir", "<=", future)
+    .orderBy("tanggal_berakhir", "asc")
+    .get();
 
-    if (idOwner !== null && idOwner !== undefined) {
-        query += `
-            AND s.id_owner = ?
-        `;
-
-        params.push(idOwner);
-    }
-
-    query += `
-        LIMIT 1
-    `;
-
-    const [rows] = await pool.execute(
-        query,
-        params
-    );
-
-    return rows[0] || null;
+  return snapshot.docs.map(docToSubscription);
 };
 
-const findSubscriptionsExpiring = async ({
-    days = 7,
-}) => {
-    const safeDays = Math.max(
-        1,
-        Math.min(
-            Number.parseInt(days, 10) || 7,
-            365
-        )
-    );
-
-    const [rows] = await pool.execute(
-        `
-        SELECT
-            s.id_subscription,
-            s.id_owner,
-            s.id_plan,
-            s.kode_invoice,
-            s.tanggal_mulai,
-            s.tanggal_berakhir,
-            s.harga,
-            s.status_langganan,
-            p.nama_paket,
-            p.durasi_hari
-        FROM subscriptions s
-        INNER JOIN subscription_plans p
-            ON p.id_plan = s.id_plan
-        WHERE s.status_langganan = 'aktif'
-          AND s.tanggal_berakhir IS NOT NULL
-          AND s.tanggal_berakhir > NOW()
-          AND s.tanggal_berakhir <= DATE_ADD(
-              NOW(),
-              INTERVAL ${safeDays} DAY
-          )
-        ORDER BY
-            s.tanggal_berakhir ASC
-        `
-    );
-
-    return rows;
-};
-
+/**
+ * Ambil subscription yang sudah kadaluwarsa
+ */
 const findExpiredSubscriptions = async () => {
-    const [rows] = await pool.execute(
-        `
-        SELECT
-            s.id_subscription,
-            s.id_owner,
-            s.id_plan,
-            s.kode_invoice,
-            s.tanggal_mulai,
-            s.tanggal_berakhir,
-            s.harga,
-            s.status_langganan,
-            p.nama_paket,
-            p.durasi_hari
-        FROM subscriptions s
-        INNER JOIN subscription_plans p
-            ON p.id_plan = s.id_plan
-        WHERE s.status_langganan = 'aktif'
-          AND s.tanggal_berakhir IS NOT NULL
-          AND s.tanggal_berakhir <= NOW()
-        ORDER BY
-            s.tanggal_berakhir ASC
-        `
-    );
+  const now = new Date();
+  const snapshot = await db.collection(SUBSCRIPTIONS_COLLECTION)
+    .where("status_langganan", "==", "aktif")
+    .where("tanggal_berakhir", "<=", now)
+    .orderBy("tanggal_berakhir", "asc")
+    .get();
 
-    return rows;
+  return snapshot.docs.map(docToSubscription);
 };
 
-const markSubscriptionExpired = async ({
-    idSubscription,
-}) => {
-    const [result] = await pool.execute(
-        `
-        UPDATE subscriptions
-        SET
-            status_langganan = 'expired',
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id_subscription = ?
-          AND status_langganan = 'aktif'
-          AND tanggal_berakhir IS NOT NULL
-          AND tanggal_berakhir <= NOW()
-        `,
-        [
-            idSubscription,
-        ]
-    );
+/**
+ * Tandai subscription sebagai expired (update status)
+ */
+const markSubscriptionExpired = async ({ idSubscription }) => {
+  const docRef = db.collection(SUBSCRIPTIONS_COLLECTION).doc(idSubscription);
+  const doc = await docRef.get();
+  if (!doc.exists) return false;
+  const data = doc.data();
+  if (data.status_langganan !== "aktif") return false;
+  const now = new Date();
+  if (!data.tanggal_berakhir || data.tanggal_berakhir.toDate() > now) {
+    return false;
+  }
 
-    return result.affectedRows > 0;
+  await docRef.update({
+    status_langganan: "expired",
+    updated_at: FieldValue.serverTimestamp(),
+  });
+  return true;
 };
 
-const getSubscriptionStatus = async ({
-    idOwner,
-}) => {
-    const subscription =
-        await findActiveSubscriptionByOwner({
-            idOwner,
-        });
+/**
+ * Dapatkan status subscription untuk owner
+ */
+const getSubscriptionStatus = async ({ idOwner }) => {
+  const subscription = await findActiveSubscriptionByOwner({ idOwner });
+  if (!subscription) {
+    return { subscription: null, status: "expired", days_remaining: 0 };
+  }
 
-    if (!subscription) {
-        return {
-            subscription: null,
-            status: "expired",
-            days_remaining: 0,
-        };
-    }
+  if (!subscription.tanggal_berakhir) {
+    return { subscription, status: "aktif", days_remaining: null };
+  }
 
-    if (!subscription.tanggal_berakhir) {
-        return {
-            subscription,
-            status: "aktif",
-            days_remaining: null,
-        };
-    }
+  const endDate = new Date(subscription.tanggal_berakhir);
+  const now = new Date();
+  const difference = endDate.getTime() - now.getTime();
+  const daysRemaining = Math.ceil(difference / (1000 * 60 * 60 * 24));
 
-    const endDate = new Date(
-        subscription.tanggal_berakhir
-    );
-
-    const now = new Date();
-
-    const difference =
-        endDate.getTime() -
-        now.getTime();
-
-    const daysRemaining = Math.ceil(
-        difference /
-        (1000 * 60 * 60 * 24)
-    );
-
-    if (difference <= 0) {
-        return {
-            subscription,
-            status: "expired",
-            days_remaining: 0,
-        };
-    }
-
-    if (daysRemaining <= 7) {
-        return {
-            subscription,
-            status: "hampir_expired",
-            days_remaining: daysRemaining,
-        };
-    }
-
-    return {
-        subscription,
-        status: "aktif",
-        days_remaining: daysRemaining,
-    };
+  if (difference <= 0) {
+    return { subscription, status: "expired", days_remaining: 0 };
+  }
+  if (daysRemaining <= 7) {
+    return { subscription, status: "hampir_expired", days_remaining: daysRemaining };
+  }
+  return { subscription, status: "aktif", days_remaining: daysRemaining };
 };
 
+// ----------------------------
+// EXPORT
+// ----------------------------
 module.exports = {
-    findAllByUser,
-    findUnreadByUser,
-    countUnreadByUser,
-    findById,
-    create,
-    createIfNotExists,
-    findByReference,
-    markAsRead,
-    markAllAsRead,
-    remove,
-    removeAllRead,
-    exists,
-    findLatestByUser,
-    findActiveSubscriptionByOwner,
-    findSubscriptionById,
-    findSubscriptionsExpiring,
-    findExpiredSubscriptions,
-    markSubscriptionExpired,
-    getSubscriptionStatus,
+  // Notifications
+  findAllByUser,
+  findUnreadByUser,
+  countUnreadByUser,
+  findById,
+  create,
+  createIfNotExists,
+  findByReference,
+  markAsRead,
+  markAllAsRead,
+  remove,
+  removeAllRead,
+  exists,
+  findLatestByUser,
+
+  // Subscriptions
+  findActiveSubscriptionByOwner,
+  findSubscriptionById,
+  findSubscriptionsExpiring,
+  findExpiredSubscriptions,
+  markSubscriptionExpired,
+  getSubscriptionStatus,
 };

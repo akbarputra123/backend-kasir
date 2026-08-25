@@ -399,6 +399,8 @@ router.post(
  *
  * supaya ":id" tidak menangkap URL tersebut.
  *
+ * CATATAN: id adalah string (Firestore document ID), bukan integer.
+ *
  * ============================================================
  */
 
@@ -415,6 +417,8 @@ router.get(
  *
  * PATCH /api/notifications/:id/read
  *
+ * CATATAN: id adalah string (Firestore document ID).
+ *
  * ============================================================
  */
 
@@ -430,6 +434,8 @@ router.patch(
  * ============================================================
  *
  * DELETE /api/notifications/:id
+ *
+ * CATATAN: id adalah string (Firestore document ID).
  *
  * ============================================================
  */
