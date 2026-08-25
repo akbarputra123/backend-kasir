@@ -1,5 +1,9 @@
-node_modules
+node_modules/
+
 .env
+
 uploads/*
+
 !uploads/.gitkeep
-echo src/config/firebase-service-account.json >> .gitignore
+
+src/config/firebase-service-account.json
