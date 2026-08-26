@@ -1,6 +1,6 @@
 const { db } = require("../../config/firebase");
 const notificationModel = require("./notification.model");
-const subscriptionModel = require("./subscription.model"); // MySQL
+const subscriptionModel = require("../subscriptions/subscription.model");
 
 /**
  * ============================================================
