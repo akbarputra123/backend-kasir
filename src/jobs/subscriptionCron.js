@@ -6,8 +6,8 @@ const notificationService = require("../modules/notifications/notification.servi
  * CRON JOB SUBSCRIPTION NOTIFICATION
  * ============================================================
  *
- * Menjalankan pengecekan subscription setiap hari pukul 06:30 WITA.
- * (WITA = UTC+8, setara dengan 05:30 WIB)
+ * Menjalankan pengecekan subscription setiap hari pukul 07:00 WITA.
+ * (WITA = UTC+8, setara dengan 06:00 WIB)
  *
  * Menggunakan:
  * notificationService.processSubscriptionNotifications()
@@ -24,7 +24,7 @@ const notificationService = require("../modules/notifications/notification.servi
 
 const jalankanSubscriptionCron = () => {
   cron.schedule(
-    "30 6 * * *", // 06:30 WITA (Asia/Makassar)
+    "0 7 * * *", // 07:00 WITA (Asia/Makassar)
     async () => {
       try {
         console.log("⏳ Cron: cek subscription harian (MySQL → Firestore)...");
@@ -54,7 +54,7 @@ const jalankanSubscriptionCron = () => {
     }
   );
 
-  console.log("✅ Subscription cron aktif - berjalan setiap hari pukul 06:30 WITA");
+  console.log("✅ Subscription cron aktif - berjalan setiap hari pukul 07:00 WITA");
 };
 
 module.exports = jalankanSubscriptionCron;
