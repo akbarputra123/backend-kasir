@@ -5,8 +5,6 @@ const { FieldValue } = require("firebase-admin/firestore");
 // KONSTANTA KOLEKSI
 // ----------------------------
 const NOTIFICATIONS_COLLECTION = "notifications";
-const SUBSCRIPTIONS_COLLECTION = "subscriptions";
-const SUBSCRIPTION_PLANS_COLLECTION = "subscription_plans";
 
 // ----------------------------
 // UTILITY
@@ -67,6 +65,8 @@ const buildNotificationQuery = (baseQuery, { idUser, idStore = null, isRead = nu
   }
   return query;
 };
+
+// --- CRUD Notifications ---
 
 const findAllByUser = async ({ idUser, idStore = null, limit = 20, offset = 0 }) => {
   const safeLimit = parseLimit(limit);
@@ -242,153 +242,9 @@ const findLatestByUser = async ({ idUser, idStore = null, limit = 5 }) => {
 };
 
 // ----------------------------
-// SUBSCRIPTIONS (FIRESTORE)
-// ----------------------------
-
-/**
- * Konversi dokumen subscription ke object dengan informasi plan (denormalisasi)
- * Asumsi saat create/update subscription, field plan_nama dan plan_durasi_hari disimpan langsung.
- */
-const docToSubscription = (doc) => {
-  const data = doc.data();
-  return {
-    id_subscription: doc.id,
-    id_owner: data.id_owner,
-    id_plan: data.id_plan,
-    jenis: data.jenis,
-    parent_subscription: data.parent_subscription || null,
-    jumlah_bulan: data.jumlah_bulan,
-    kode_invoice: data.kode_invoice,
-    tanggal_mulai: data.tanggal_mulai ? data.tanggal_mulai.toDate().toISOString() : null,
-    tanggal_berakhir: data.tanggal_berakhir ? data.tanggal_berakhir.toDate().toISOString() : null,
-    harga: data.harga,
-    status_langganan: data.status_langganan,
-    metode_pembayaran: data.metode_pembayaran,
-    bukti_pembayaran: data.bukti_pembayaran || null,
-    catatan: data.catatan || null,
-    created_at: data.created_at ? data.created_at.toDate().toISOString() : null,
-    updated_at: data.updated_at ? data.updated_at.toDate().toISOString() : null,
-    // denormalisasi dari plan
-    nama_paket: data.nama_paket,
-    durasi_hari: data.durasi_hari,
-    deskripsi: data.deskripsi || null,
-  };
-};
-
-/**
- * Ambil subscription aktif milik owner (paling akhir berdasarkan tanggal_berakhir)
- */
-const findActiveSubscriptionByOwner = async ({ idOwner }) => {
-  const snapshot = await db.collection(SUBSCRIPTIONS_COLLECTION)
-    .where("id_owner", "==", idOwner)
-    .where("status_langganan", "==", "aktif")
-    .orderBy("tanggal_berakhir", "desc")
-    .limit(1)
-    .get();
-
-  if (snapshot.empty) return null;
-  return docToSubscription(snapshot.docs[0]);
-};
-
-/**
- * Ambil subscription berdasarkan ID (opsional filter idOwner)
- */
-const findSubscriptionById = async ({ idSubscription, idOwner = null }) => {
-  const docRef = db.collection(SUBSCRIPTIONS_COLLECTION).doc(idSubscription);
-  const doc = await docRef.get();
-  if (!doc.exists) return null;
-  const data = doc.data();
-  if (idOwner !== null && idOwner !== undefined && data.id_owner !== idOwner) {
-    return null;
-  }
-  return docToSubscription(doc);
-};
-
-/**
- * Ambil subscription yang akan kadaluwarsa dalam `days` hari ke depan
- */
-const findSubscriptionsExpiring = async ({ days = 7 }) => {
-  const safeDays = Math.max(1, Math.min(Number.parseInt(days, 10) || 7, 365));
-  const now = new Date();
-  const future = new Date(now.getTime() + safeDays * 24 * 60 * 60 * 1000);
-
-  const snapshot = await db.collection(SUBSCRIPTIONS_COLLECTION)
-    .where("status_langganan", "==", "aktif")
-    .where("tanggal_berakhir", ">", now)
-    .where("tanggal_berakhir", "<=", future)
-    .orderBy("tanggal_berakhir", "asc")
-    .get();
-
-  return snapshot.docs.map(docToSubscription);
-};
-
-/**
- * Ambil subscription yang sudah kadaluwarsa
- */
-const findExpiredSubscriptions = async () => {
-  const now = new Date();
-  const snapshot = await db.collection(SUBSCRIPTIONS_COLLECTION)
-    .where("status_langganan", "==", "aktif")
-    .where("tanggal_berakhir", "<=", now)
-    .orderBy("tanggal_berakhir", "asc")
-    .get();
-
-  return snapshot.docs.map(docToSubscription);
-};
-
-/**
- * Tandai subscription sebagai expired (update status)
- */
-const markSubscriptionExpired = async ({ idSubscription }) => {
-  const docRef = db.collection(SUBSCRIPTIONS_COLLECTION).doc(idSubscription);
-  const doc = await docRef.get();
-  if (!doc.exists) return false;
-  const data = doc.data();
-  if (data.status_langganan !== "aktif") return false;
-  const now = new Date();
-  if (!data.tanggal_berakhir || data.tanggal_berakhir.toDate() > now) {
-    return false;
-  }
-
-  await docRef.update({
-    status_langganan: "expired",
-    updated_at: FieldValue.serverTimestamp(),
-  });
-  return true;
-};
-
-/**
- * Dapatkan status subscription untuk owner
- */
-const getSubscriptionStatus = async ({ idOwner }) => {
-  const subscription = await findActiveSubscriptionByOwner({ idOwner });
-  if (!subscription) {
-    return { subscription: null, status: "expired", days_remaining: 0 };
-  }
-
-  if (!subscription.tanggal_berakhir) {
-    return { subscription, status: "aktif", days_remaining: null };
-  }
-
-  const endDate = new Date(subscription.tanggal_berakhir);
-  const now = new Date();
-  const difference = endDate.getTime() - now.getTime();
-  const daysRemaining = Math.ceil(difference / (1000 * 60 * 60 * 24));
-
-  if (difference <= 0) {
-    return { subscription, status: "expired", days_remaining: 0 };
-  }
-  if (daysRemaining <= 7) {
-    return { subscription, status: "hampir_expired", days_remaining: daysRemaining };
-  }
-  return { subscription, status: "aktif", days_remaining: daysRemaining };
-};
-
-// ----------------------------
-// EXPORT
+// EXPORT (HANYA NOTIFIKASI)
 // ----------------------------
 module.exports = {
-  // Notifications
   findAllByUser,
   findUnreadByUser,
   countUnreadByUser,
@@ -402,12 +258,4 @@ module.exports = {
   removeAllRead,
   exists,
   findLatestByUser,
-
-  // Subscriptions
-  findActiveSubscriptionByOwner,
-  findSubscriptionById,
-  findSubscriptionsExpiring,
-  findExpiredSubscriptions,
-  markSubscriptionExpired,
-  getSubscriptionStatus,
 };

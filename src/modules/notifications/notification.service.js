@@ -1,5 +1,6 @@
 const { db } = require("../../config/firebase");
 const notificationModel = require("./notification.model");
+const subscriptionModel = require("./subscription.model"); // MySQL
 
 /**
  * ============================================================
@@ -404,8 +405,8 @@ const notifySubscriptionExpired = async ({
     referenceId: idSubscription,
   });
 
-  // Update status subscription menjadi expired (via model)
-  await notificationModel.markSubscriptionExpired({ idSubscription });
+  // Update status subscription menjadi expired via MySQL
+  await subscriptionModel.markSubscriptionExpired(idSubscription);
 
   return notification;
 };
@@ -419,21 +420,37 @@ const checkSubscriptionOwner = async ({ idOwner }) => {
   if (!idOwner) {
     return { subscription: null, status: "expired", days_remaining: 0 };
   }
-  return await notificationModel.getSubscriptionStatus({ idOwner });
+
+  // Gunakan subscriptionModel (MySQL)
+  const subscription = await subscriptionModel.findActiveByOwner(idOwner);
+  if (!subscription) {
+    return { subscription: null, status: "expired", days_remaining: 0 };
+  }
+
+  const endDate = new Date(subscription.tanggal_berakhir);
+  const now = new Date();
+  const difference = endDate.getTime() - now.getTime();
+  const daysRemaining = Math.ceil(difference / (1000 * 60 * 60 * 24));
+
+  if (difference <= 0) {
+    return { subscription, status: "expired", days_remaining: 0 };
+  }
+  if (daysRemaining <= SUBSCRIPTION_WARNING_DAYS) {
+    return { subscription, status: "hampir_expired", days_remaining: daysRemaining };
+  }
+  return { subscription, status: "aktif", days_remaining: daysRemaining };
 };
 
 /**
  * ============================================================
- * CHECK SUBSCRIPTION NOTIFICATIONS (untuk semua owner)
+ * CHECK SUBSCRIPTION NOTIFICATIONS (untuk semua owner) - CRON
  * ============================================================
  */
 const checkSubscriptionNotifications = async () => {
   const result = { expiring: [], expired: [] };
 
-  // Hampir expired
-  const expiringSubscriptions = await notificationModel.findSubscriptionsExpiring({
-    days: SUBSCRIPTION_WARNING_DAYS,
-  });
+  // Hampir expired - ambil dari MySQL
+  const expiringSubscriptions = await subscriptionModel.findSubscriptionsExpiringSoon(SUBSCRIPTION_WARNING_DAYS);
   for (const subscription of expiringSubscriptions) {
     try {
       const notif = await notifySubscriptionExpiring({
@@ -449,8 +466,8 @@ const checkSubscriptionNotifications = async () => {
     }
   }
 
-  // Sudah expired
-  const expiredSubscriptions = await notificationModel.findExpiredSubscriptions();
+  // Sudah expired - ambil dari MySQL
+  const expiredSubscriptions = await subscriptionModel.findSubscriptionsExpired();
   for (const subscription of expiredSubscriptions) {
     try {
       const notif = await notifySubscriptionExpired({
@@ -477,7 +494,8 @@ const checkSubscriptionNotifications = async () => {
 const checkSubscriptionNotificationForOwner = async ({ idOwner }) => {
   if (!idOwner) return { expiring: null, expired: null };
 
-  const subscription = await notificationModel.findActiveSubscriptionByOwner({ idOwner });
+  // Gunakan subscriptionModel (MySQL)
+  const subscription = await subscriptionModel.findActiveByOwner(idOwner);
   if (!subscription) return { expiring: null, expired: null };
 
   const endDate = new Date(subscription.tanggal_berakhir);
@@ -524,7 +542,24 @@ const getSubscriptionStatus = async ({ idOwner }) => {
   if (!idOwner) {
     return { subscription: null, status: "expired", days_remaining: 0 };
   }
-  return await notificationModel.getSubscriptionStatus({ idOwner });
+  // Gunakan subscriptionModel (MySQL)
+  const subscription = await subscriptionModel.findActiveByOwner(idOwner);
+  if (!subscription) {
+    return { subscription: null, status: "expired", days_remaining: 0 };
+  }
+
+  const endDate = new Date(subscription.tanggal_berakhir);
+  const now = new Date();
+  const difference = endDate.getTime() - now.getTime();
+  const daysRemaining = Math.ceil(difference / (1000 * 60 * 60 * 24));
+
+  if (difference <= 0) {
+    return { subscription, status: "expired", days_remaining: 0 };
+  }
+  if (daysRemaining <= SUBSCRIPTION_WARNING_DAYS) {
+    return { subscription, status: "hampir_expired", days_remaining: daysRemaining };
+  }
+  return { subscription, status: "aktif", days_remaining: daysRemaining };
 };
 
 /**
