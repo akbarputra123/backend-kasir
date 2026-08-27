@@ -6,11 +6,23 @@ const notificationService = require("../modules/notifications/notification.servi
  * CRON JOB SUBSCRIPTION NOTIFICATION
  * ============================================================
  *
- * Menjalankan pengecekan subscription setiap hari pukul 07:00 WITA.
- * (WITA = UTC+8, setara dengan 06:00 WIB)
+ * Menjalankan pengecekan subscription setiap hari pukul 10:30
+ * Waktu Indonesia Timur (WIT).
+ *
+ * Timezone:
+ * Asia/Jayapura
+ *
+ * Berlaku untuk:
+ * - Maluku Utara
+ * - Papua
+ * - Papua Barat
+ * - Papua Barat Daya
+ * - Papua Tengah
+ * - Papua Pegunungan
+ * - Papua Selatan
  *
  * Menggunakan:
- * notificationService.processSubscriptionNotifications()
+ * notificationService.checkSubscriptionNotifications()
  *
  * Alur:
  * 1. Cari subscription yang hampir expired (≤ 7 hari) dari MySQL
@@ -24,37 +36,51 @@ const notificationService = require("../modules/notifications/notification.servi
 
 const jalankanSubscriptionCron = () => {
   cron.schedule(
-    "0 7 * * *", // 07:00 WITA (Asia/Makassar)
+    "30 10 * * *", // Setiap hari pukul 10:30 WIT
     async () => {
       try {
-        console.log("⏳ Cron: cek subscription harian (MySQL → Firestore)...");
+        console.log(
+          "⏳ Cron: cek subscription harian (MySQL → Firestore)..."
+        );
 
-        const result = await notificationService.processSubscriptionNotifications();
+        const result =
+          await notificationService.checkSubscriptionNotifications();
 
-        const expiringProcessed = result.expiringSoon.processed || 0;
-        const expiringCreated = result.expiringSoon.created || 0;
-        const expiredProcessed = result.expired.processed || 0;
-        const expiredNotified = result.expired.notified || 0;
-        const expiredUpdated = result.expired.updated || 0;
+        const expiringCount = result.expiring.length;
+        const expiredCount = result.expired.length;
 
-        if (expiringProcessed === 0 && expiredProcessed === 0) {
-          console.log("✅ Tidak ada subscription yang perlu diproses");
+        if (expiringCount === 0 && expiredCount === 0) {
+          console.log(
+            "✅ Tidak ada subscription yang perlu diproses"
+          );
         } else {
-          console.log(`⚠️ Hampir expired: ditemukan ${expiringProcessed}, notifikasi dibuat ${expiringCreated}`);
-          console.log(`🔥 Expired: ditemukan ${expiredProcessed}, notifikasi ${expiredNotified}, status diupdate ${expiredUpdated}`);
+          console.log(
+            `⚠️ Hampir expired: ditemukan ${expiringCount}, notifikasi dibuat ${expiringCount}`
+          );
+
+          console.log(
+            `🔥 Expired: ditemukan ${expiredCount}, notifikasi dibuat ${expiredCount}`
+          );
         }
 
         console.log("✅ Cron subscription selesai");
       } catch (error) {
-        console.error("❌ Subscription Cron Error:", error);
+        console.error(
+          "❌ Subscription Cron Error:",
+          error
+        );
       }
     },
     {
-      timezone: "Asia/Makassar", // Waktu Indonesia Timur (WITA)
+      // Waktu Indonesia Timur (WIT)
+      // Maluku Utara menggunakan Asia/Jayapura
+      timezone: "Asia/Jayapura",
     }
   );
 
-  console.log("✅ Subscription cron aktif - berjalan setiap hari pukul 07:00 WITA");
+  console.log(
+    "✅ Subscription cron aktif - berjalan setiap hari pukul 10:30 WIT (Asia/Jayapura)"
+  );
 };
 
 module.exports = jalankanSubscriptionCron;
