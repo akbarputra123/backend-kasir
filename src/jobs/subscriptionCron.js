@@ -33,10 +33,9 @@ const notificationService = require("../modules/notifications/notification.servi
  *
  * ============================================================
  */
-
 const jalankanSubscriptionCron = () => {
   cron.schedule(
-    "30 10 * * *", // Setiap hari pukul 10:30 WIT
+    "45 10 * * *", // Setiap hari pukul 10:45 WIT
     async () => {
       try {
         console.log(
@@ -72,14 +71,12 @@ const jalankanSubscriptionCron = () => {
       }
     },
     {
-      // Waktu Indonesia Timur (WIT)
-      // Maluku Utara menggunakan Asia/Jayapura
       timezone: "Asia/Jayapura",
     }
   );
 
   console.log(
-    "✅ Subscription cron aktif - berjalan setiap hari pukul 10:30 WIT (Asia/Jayapura)"
+    "✅ Subscription cron aktif - berjalan setiap hari pukul 10:45 WIT (Asia/Jayapura)"
   );
 };
 
