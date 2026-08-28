@@ -325,6 +325,8 @@ const notifyTransactionCancelled = async ({
  * ============================================================
  * NOTIFIKASI SUBSCRIPTION HAMPIR EXPIRED
  * ============================================================
+ * Perubahan: sekarang menggunakan createNotification (tanpa cek duplikat)
+ * sehingga setiap hari akan terkirim notifikasi baru selama masa peringatan.
  */
 const notifySubscriptionExpiring = async ({
   idSubscription,
@@ -356,7 +358,8 @@ const notifySubscriptionExpiring = async ({
   let pesan = `${packageName} akan berakhir dalam ${remaining} hari pada ${formattedDate}.`;
   if (kodeInvoice) pesan += ` Invoice ${kodeInvoice}.`;
 
-  return await createNotificationIfNotExists({
+  // ✨ Perubahan: gunakan createNotification (bukan createNotificationIfNotExists)
+  return await createNotification({
     idUser: idOwner,
     idStore: null,
     tipe: "subscription_hampir_expired",
@@ -371,6 +374,7 @@ const notifySubscriptionExpiring = async ({
  * ============================================================
  * NOTIFIKASI SUBSCRIPTION EXPIRED
  * ============================================================
+ * Tetap menggunakan createNotificationIfNotExists agar hanya muncul sekali.
  */
 const notifySubscriptionExpired = async ({
   idSubscription,

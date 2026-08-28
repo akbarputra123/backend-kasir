@@ -1,4 +1,3 @@
-
 const cron = require("node-cron");
 const notificationService = require("../modules/notifications/notification.service");
 
@@ -7,7 +6,7 @@ const notificationService = require("../modules/notifications/notification.servi
  * CRON JOB SUBSCRIPTION NOTIFICATION
  * ============================================================
  *
- * Menjalankan pengecekan subscription setiap hari pukul 12:00
+ * Menjalankan pengecekan subscription setiap hari pukul 12:15
  * Waktu Indonesia Timur (WIT).
  *
  * Timezone:
@@ -27,13 +26,13 @@ const notificationService = require("../modules/notifications/notification.servi
  *
  * Alur:
  * 1. Cari subscription yang hampir expired (≤ 7 hari) dari MySQL
- * 2. Buat notifikasi di Firestore (anti duplikat)
+ * 2. Buat notifikasi di Firestore (setiap hari, karena sekarang menggunakan createNotification tanpa duplikat)
  * 3. Cari subscription yang sudah expired dari MySQL
- * 4. Buat notifikasi expired di Firestore (anti duplikat)
+ * 4. Buat notifikasi expired di Firestore (anti duplikat, hanya sekali)
  * 5. Update status subscription menjadi 'expired' di MySQL
  *
  * Jadwal:
- * Setiap hari pukul 12:00 WIT
+ * Setiap hari pukul 12:15 WIT
  * Timezone: Asia/Jayapura
  *
  * ============================================================
@@ -41,11 +40,11 @@ const notificationService = require("../modules/notifications/notification.servi
 
 const jalankanSubscriptionCron = () => {
   cron.schedule(
-    "0 12 * * *", // Setiap hari pukul 12:00 WIT
+    "15 12 * * *", // Setiap hari pukul 12:15 WIT (perubahan dari 12:00 menjadi 12:15)
     async () => {
       try {
         console.log(
-          "⏳ Cron: cek subscription harian (MySQL → Firestore)..."
+          "⏳ Cron: cek subscription harian (MySQL → Firestore) pada pukul 12:15 WIT..."
         );
 
         const result =
@@ -82,7 +81,7 @@ const jalankanSubscriptionCron = () => {
   );
 
   console.log(
-    "✅ Subscription cron aktif - berjalan setiap hari pukul 12:00 WIT (Asia/Jayapura)"
+    "✅ Subscription cron aktif - berjalan setiap hari pukul 12:15 WIT (Asia/Jayapura)"
   );
 };
 
