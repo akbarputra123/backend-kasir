@@ -325,8 +325,7 @@ const notifyTransactionCancelled = async ({
  * ============================================================
  * NOTIFIKASI SUBSCRIPTION HAMPIR EXPIRED
  * ============================================================
- * Perubahan: sekarang menggunakan createNotification (tanpa cek duplikat)
- * sehingga setiap hari akan terkirim notifikasi baru selama masa peringatan.
+ * Menggunakan timezone WIT (Asia/Jayapura) untuk format tanggal.
  */
 const notifySubscriptionExpiring = async ({
   idSubscription,
@@ -348,17 +347,18 @@ const notifySubscriptionExpiring = async ({
   }
   if (remaining <= 0 || remaining > SUBSCRIPTION_WARNING_DAYS) return null;
 
+  // Format tanggal dengan timezone WIT (Asia/Jayapura)
   const formattedDate = endDate.toLocaleDateString("id-ID", {
     day: "2-digit",
     month: "long",
     year: "numeric",
+    timeZone: "Asia/Jayapura", // WIT untuk Maluku Utara & Papua
   });
   const packageName = namaPaket || "Subscription";
 
   let pesan = `${packageName} akan berakhir dalam ${remaining} hari pada ${formattedDate}.`;
   if (kodeInvoice) pesan += ` Invoice ${kodeInvoice}.`;
 
-  // ✨ Perubahan: gunakan createNotification (bukan createNotificationIfNotExists)
   return await createNotification({
     idUser: idOwner,
     idStore: null,
@@ -374,7 +374,7 @@ const notifySubscriptionExpiring = async ({
  * ============================================================
  * NOTIFIKASI SUBSCRIPTION EXPIRED
  * ============================================================
- * Tetap menggunakan createNotificationIfNotExists agar hanya muncul sekali.
+ * Menggunakan timezone WIT (Asia/Jayapura) untuk format tanggal.
  */
 const notifySubscriptionExpired = async ({
   idSubscription,
@@ -393,6 +393,7 @@ const notifySubscriptionExpired = async ({
     day: "2-digit",
     month: "long",
     year: "numeric",
+    timeZone: "Asia/Jayapura", // WIT untuk Maluku Utara & Papua
   });
   const packageName = namaPaket || "Subscription";
 

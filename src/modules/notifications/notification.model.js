@@ -28,15 +28,38 @@ const parseOffset = (value, fallback = 0) => {
   return parsePositiveInt(value, fallback);
 };
 
+/**
+ * Format tanggal ke string dengan timezone WIT (Asia/Jayapura)
+ * Digunakan untuk menampilkan waktu di Maluku Utara & Papua
+ */
+const formatToWIT = (date) => {
+  if (!date) return null;
+  if (typeof date === "string") date = new Date(date);
+  if (!(date instanceof Date) || isNaN(date.getTime())) return null;
+  return date.toLocaleString("id-ID", {
+    timeZone: "Asia/Jayapura",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+};
+
 // ----------------------------
 // NOTIFICATIONS (FIRESTORE)
 // ----------------------------
 
 /**
  * Konversi dokumen Firestore ke object notifikasi
+ * Menambahkan field created_at_wit dan read_at_wit untuk zona WIT
  */
 const docToNotification = (doc) => {
   const data = doc.data();
+  const createdAt = data.created_at ? data.created_at.toDate() : null;
+  const readAt = data.read_at ? data.read_at.toDate() : null;
+
   return {
     id_notification: doc.id,
     id_user: data.id_user,
@@ -47,8 +70,11 @@ const docToNotification = (doc) => {
     reference_type: data.reference_type || null,
     reference_id: data.reference_id || null,
     is_read: data.is_read || false,
-    read_at: data.read_at ? data.read_at.toDate().toISOString() : null,
-    created_at: data.created_at ? data.created_at.toDate().toISOString() : null,
+    read_at: readAt ? readAt.toISOString() : null,
+    created_at: createdAt ? createdAt.toISOString() : null,
+    // Tambahan field dengan format WIT
+    created_at_wit: createdAt ? formatToWIT(createdAt) : null,
+    read_at_wit: readAt ? formatToWIT(readAt) : null,
   };
 };
 
@@ -242,7 +268,7 @@ const findLatestByUser = async ({ idUser, idStore = null, limit = 5 }) => {
 };
 
 // ----------------------------
-// EXPORT (HANYA NOTIFIKASI)
+// EXPORT
 // ----------------------------
 module.exports = {
   findAllByUser,
@@ -258,4 +284,6 @@ module.exports = {
   removeAllRead,
   exists,
   findLatestByUser,
+  // Ekspor utility format jika diperlukan
+  formatToWIT,
 };
