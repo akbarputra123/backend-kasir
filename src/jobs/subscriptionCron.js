@@ -1,3 +1,4 @@
+
 const cron = require("node-cron");
 const notificationService = require("../modules/notifications/notification.service");
 
@@ -6,7 +7,7 @@ const notificationService = require("../modules/notifications/notification.servi
  * CRON JOB SUBSCRIPTION NOTIFICATION
  * ============================================================
  *
- * Menjalankan pengecekan subscription setiap hari pukul 10:30
+ * Menjalankan pengecekan subscription setiap hari pukul 12:00
  * Waktu Indonesia Timur (WIT).
  *
  * Timezone:
@@ -31,11 +32,16 @@ const notificationService = require("../modules/notifications/notification.servi
  * 4. Buat notifikasi expired di Firestore (anti duplikat)
  * 5. Update status subscription menjadi 'expired' di MySQL
  *
+ * Jadwal:
+ * Setiap hari pukul 12:00 WIT
+ * Timezone: Asia/Jayapura
+ *
  * ============================================================
  */
+
 const jalankanSubscriptionCron = () => {
   cron.schedule(
-    "45 10 * * *", // Setiap hari pukul 10:45 WIT
+    "0 12 * * *", // Setiap hari pukul 12:00 WIT
     async () => {
       try {
         console.log(
@@ -76,7 +82,7 @@ const jalankanSubscriptionCron = () => {
   );
 
   console.log(
-    "✅ Subscription cron aktif - berjalan setiap hari pukul 10:45 WIT (Asia/Jayapura)"
+    "✅ Subscription cron aktif - berjalan setiap hari pukul 12:00 WIT (Asia/Jayapura)"
   );
 };
 
