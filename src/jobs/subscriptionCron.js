@@ -6,8 +6,8 @@ const notificationService = require("../modules/notifications/notification.servi
  * CRON JOB SUBSCRIPTION NOTIFICATION
  * ============================================================
  *
- * Menjalankan pengecekan subscription setiap hari pukul 12:15
- * Waktu Indonesia Timur (WIT).
+ * Menjalankan pengecekan subscription setiap hari pukul 00:00
+ * Waktu Indonesia Timur (WIT) – tengah malam.
  *
  * Timezone:
  * Asia/Jayapura
@@ -32,7 +32,7 @@ const notificationService = require("../modules/notifications/notification.servi
  * 5. Update status subscription menjadi 'expired' di MySQL
  *
  * Jadwal:
- * Setiap hari pukul 12:15 WIT
+ * Setiap hari pukul 00:00 WIT (tengah malam)
  * Timezone: Asia/Jayapura
  *
  * ============================================================
@@ -40,11 +40,11 @@ const notificationService = require("../modules/notifications/notification.servi
 
 const jalankanSubscriptionCron = () => {
   cron.schedule(
-    "15 12 * * *", // Setiap hari pukul 12:15 WIT (perubahan dari 12:00 menjadi 12:15)
+    "0 0 * * *", // Setiap hari pukul 00:00 WIT (tengah malam)
     async () => {
       try {
         console.log(
-          "⏳ Cron: cek subscription harian (MySQL → Firestore) pada pukul 12:15 WIT..."
+          "⏳ Cron: cek subscription harian (MySQL → Firestore) pada pukul 00:00 WIT..."
         );
 
         const result =
@@ -81,7 +81,7 @@ const jalankanSubscriptionCron = () => {
   );
 
   console.log(
-    "✅ Subscription cron aktif - berjalan setiap hari pukul 12:15 WIT (Asia/Jayapura)"
+    "✅ Subscription cron aktif - berjalan setiap hari pukul 00:00 WIT (Asia/Jayapura)"
   );
 };
 
